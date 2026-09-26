@@ -156,7 +156,10 @@ js/
   interiores, como en una ilustración.
 - **Pelo por mechones.** Cada peinado se construye con decenas de mechones (flequillo,
   coronilla, laterales y nuca) que nacen en el cuero cabelludo, siguen la cabeza, caen por
-  gravedad sin atravesar el cuerpo y acaban en punta, cada uno con su sombra y su brillo.
+  gravedad sin atravesar el cuerpo y acaban en punta. Se dibujan como una sola masa, al estilo
+  anime: contorno sólo por fuera, líneas de separación sólo hacia las puntas, sombras en cuña,
+  un degradado general de volumen y una banda de brillo común ("anillo de ángel"). El
+  flequillo se detiene a la altura de las cejas para no tapar los ojos.
 - **Pose natural.** Por defecto el personaje está en contrapposto (peso en una pierna, hombros
   compensados, cabeza ladeada) en lugar de rígido.
 - **Pixel art.** Se hace un pase de identificadores (cada pieza con un color único) y un pase de

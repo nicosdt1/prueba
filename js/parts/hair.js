@@ -213,7 +213,7 @@
     // Flequillo: un mechón por cada punta del perfil del flequillo.
     (st.bangs || []).forEach(([phi, l], i, arr) => {
       const gap = i ? Math.abs(phi - arr[i - 1][0]) : Math.abs(arr[1][0] - phi);
-      add({ phi: phi * 0.8 + (r() - 0.5) * 0.06, drift: phi * 0.22 + (r() - 0.5) * 0.12, l0: st.hairline - 0.2, l1: l + 0.02 + (r() - 0.5) * 0.04, w: gap * (1.1 + r() * 0.4), out: e * 0.85, kind: 'bang', wave: st.curly ? 0.06 : 0.02, root: 0.35 });
+      add({ phi: phi * 0.8 + (r() - 0.5) * 0.06, drift: phi * 0.22 + (r() - 0.5) * 0.12, l0: st.hairline - 0.2, l1: Math.min(l + 0.02 + (r() - 0.5) * 0.04, rig.face.brow + 0.06 + 0.1 * Math.abs(phi) * Math.abs(phi)), w: gap * (1.1 + r() * 0.4), out: e * 0.85, kind: 'bang', wave: st.curly ? 0.06 : 0.02, root: 0.35 });
     });
     if (st.swept) {
       for (let i = 0; i < 9; i++) {
@@ -251,8 +251,8 @@
     return out;
   }
 
-  // Dibuja un mechón como polígono afilado con sombra, brillo y contorno.
-  function drawClump(ctx, rig, P, width, color, rootW) {
+  // Geometría 2D de un mechón: polígono afilado alrededor de su eje proyectado.
+  function clumpGeom(P, width, rootW) {
     const n = P.length, L = [], R = [], nrm = [];
     for (let i = 0; i < n; i++) {
       const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)];
@@ -266,28 +266,82 @@
       L.push({ x: P[i].x - ty * w, y: P[i].y + tx * w });
       R.push({ x: P[i].x + ty * w, y: P[i].y - tx * w });
     }
-    const outline = L.concat(R.slice().reverse());
+    return { P, n, L, R, nrm, outline: L.concat(R.slice().reverse()) };
+  }
+
+  // Dibuja un grupo de mechones como una sola masa de pelo, al estilo anime:
+  // contorno sólo por fuera del conjunto, sombra en el lado contrario a la luz,
+  // líneas de separación sólo hacia las puntas y una banda de brillo común.
+  // ring: puntos proyectados del "anillo de brillo" (o null).
+  function drawClumps(ctx, rig, list, color, ring) {
+    if (!list.length) return;
+    const G = list.map((cl) => clumpGeom(cl.P, cl.w, cl.root));
+    if (SC.ID) { for (const g of G) SC.draw.fill(ctx, color, (q) => SC.draw.poly(q, g.outline)); return; }
     const hi = rig.detail === 'high';
     const trace = (q, pts) => (hi ? SC.draw.smooth(q, pts, true) : SC.draw.poly(q, pts));
-    if (SC.ID) { SC.draw.fill(ctx, color, (q) => SC.draw.poly(q, outline)); return; }
-    if (rig.line > 0) SC.draw.stroke(ctx, SC.draw.lineColor(rig, color), rig.line * 1.6, (q) => trace(q, outline));
-    ctx.beginPath(); trace(ctx, outline); ctx.fillStyle = color; ctx.fill();
-    // Lado en sombra: el opuesto a la luz (arriba-izquierda).
-    const mid = Math.floor(n / 2), lit = nrm[mid].x * -0.55 + nrm[mid].y * -0.83 > 0 ? -1 : 1;
-    const side = lit > 0 ? L : R, sh = [];
-    for (let i = 1; i < n; i++) sh.push({ x: U.lerp(P[i].x, side[i].x, 0.15), y: U.lerp(P[i].y, side[i].y, 0.15) });
     const shadow = U.multiply(color, V.MATERIALS.hair.tint);
-    ctx.save();
-    ctx.beginPath(); trace(ctx, outline); ctx.clip();
-    SC.draw.fill(ctx, rig.pixel ? U.multiply(shadow, '#d6c8e4') : shadow, (q) => SC.draw.poly(q, sh.concat(side.slice(1).reverse())));
-    // Brillo junto a la raíz, en el lado iluminado.
-    const other = lit > 0 ? R : L, i0 = Math.round(n * 0.12), i1 = Math.round(n * (hi ? 0.42 : 0.35));
-    const hl = [];
-    for (let i = i0; i <= i1; i++) hl.push({ x: U.lerp(P[i].x, other[i].x, 0.25), y: U.lerp(P[i].y, other[i].y, 0.25) });
-    for (let i = i1; i >= i0; i--) hl.push({ x: U.lerp(P[i].x, other[i].x, 0.7), y: U.lerp(P[i].y, other[i].y, 0.7) });
-    SC.draw.fill(ctx, hi ? U.rgba(U.shade(color, 0.45), 0.75) : U.shade(color, 0.3), (q) => SC.draw.poly(q, hl));
-    ctx.restore();
-    if (hi && rig.line > 0) SC.draw.stroke(ctx, U.rgba(U.shade(color, -0.5), 0.5), rig.line * 0.5, (q) => SC.draw.poly(q, P.slice(Math.round(n * 0.3), n - 1), false));
+    const deep = U.shade(shadow, -0.25);
+    // 1) Contorno exterior: se trazan todos y los rellenos tapan la parte interior.
+    if (rig.line > 0) for (const g of G) SC.draw.stroke(ctx, SC.draw.lineColor(rig, color), rig.line * 1.7, (q) => trace(q, g.outline));
+    // 2) Relleno y sombra de cada mechón (los de delante tapan a los de detrás).
+    for (const g of G) {
+      ctx.beginPath(); trace(ctx, g.outline); ctx.fillStyle = color; ctx.fill();
+      const { P, n, L, R, nrm } = g, mid = Math.floor(n / 2);
+      const lit = nrm[mid].x * -0.55 + nrm[mid].y * -0.83 > 0 ? -1 : 1;
+      // Sombra en cuña fina a lo largo del borde en sombra, hacia la punta.
+      const side = lit > 0 ? L : R, sh = [], i0 = Math.round(n * 0.25);
+      for (let i = i0; i < n; i++) {
+        const k = (i - i0) / Math.max(1, n - 1 - i0);
+        sh.push({ x: U.lerp(side[i].x, P[i].x, 0.25 + 0.55 * Math.sin(k * PI)), y: U.lerp(side[i].y, P[i].y, 0.25 + 0.55 * Math.sin(k * PI)) });
+      }
+      ctx.save();
+      ctx.beginPath(); trace(ctx, g.outline); ctx.clip();
+      SC.draw.fill(ctx, rig.pixel ? U.multiply(shadow, '#d6c8e4') : shadow, (q) => SC.draw.poly(q, sh.concat(side.slice(i0).reverse())));
+      ctx.restore();
+      // Separación entre mechones: sólo en la mitad de las puntas (los mechones
+      // de delante la tapan donde se superponen).
+      if (rig.line > 0) {
+        const j0 = Math.round(n * 0.55), edge = (S) => S.slice(j0).concat([P[n - 1]]);
+        SC.draw.stroke(ctx, U.rgba(SC.draw.lineColor(rig, color), hi ? 0.6 : 1), rig.line * (hi ? 0.9 : 1.1), (q) => { SC.draw.poly(q, edge(L), false); SC.draw.poly(q, edge(R), false); });
+      }
+    }
+    // Volumen general: la masa se oscurece hacia abajo, lejos de la luz.
+    if (hi) {
+      let y0 = Infinity, y1 = -Infinity;
+      for (const g of G) for (const p of g.outline) { y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+      ctx.save();
+      ctx.beginPath();
+      for (const g of G) trace(ctx, g.outline);
+      ctx.clip();
+      const gr = ctx.createLinearGradient(0, y0, 0, y1);
+      gr.addColorStop(0, U.rgba(deep, 0)); gr.addColorStop(0.45, U.rgba(deep, 0.08)); gr.addColorStop(1, U.rgba(deep, 0.4));
+      ctx.fillStyle = gr; ctx.fillRect(-1e4, y0 - 1, 2e4, y1 - y0 + 2);
+      ctx.restore();
+    }
+    // 3) Banda de brillo común, recortada a la masa de pelo.
+    if (ring && ring.length > 2) {
+      ctx.save();
+      ctx.beginPath();
+      for (const g of G) trace(ctx, g.outline);
+      ctx.clip();
+      SC.draw.fill(ctx, hi ? U.rgba(U.mix(color, '#ffffff', 0.4), 0.65) : U.shade(color, 0.3), (q) => SC.draw.poly(q, ring));
+      ctx.restore();
+    }
+  }
+
+  // Banda de brillo ("anillo de ángel"): franja en zigzag alrededor de la parte
+  // alta de la cabeza, en el lado que mira a la luz.
+  function hairRing(rig, Hd, st) {
+    if (st.thin || st.spikes) return null;
+    const e = st.vol * rig.head.w * 1.05, top = [], bot = [], N = 22;
+    const l0 = 0.13, l1 = 0.19;
+    for (let i = 0; i <= N; i++) {
+      const phi = clampPhi(rig, U.lerp(-1.25, 1.1, i / N));
+      top.push([l0 + 0.012 * Math.sin(i * 1.7), phi, e]);
+      bot.push([l1 + (i % 2 ? 0.05 : 0), phi, e]);
+    }
+    const P = V.project(rig, Hd.at, top.concat(bot.reverse()));
+    return P.filter((p) => p.f > 0).length > P.length * 0.5 ? P : null;
   }
 
   // Proyecta y clasifica los mechones en visibles (delante) y ocultos (detrás).
@@ -343,7 +397,15 @@
           SC.draw.poly(ctx, cut);
           ctx.clip('evenodd');
         }
-        V.fill(ctx, rig, vol, st.thin ? c.main : U.shade(c.main, -0.12), { mat: 'hair', cast: 0.01 });
+        V.fill(ctx, rig, vol, c.main, { mat: 'hair', cast: 0.01 });
+        // El anillo de brillo empieza en el casco y continúa sobre los mechones.
+        const ring = rig.detail === 'high' && !SC.ID ? hairRing(rig, Hd, st) : null;
+        if (ring) {
+          ctx.save();
+          V.clip(ctx, vol);
+          SC.draw.fill(ctx, U.rgba(U.mix(c.main, '#ffffff', 0.4), 0.65), (q) => SC.draw.poly(q, ring));
+          ctx.restore();
+        }
         if (cut && rig.line > 0) {
           // Contorno donde el pelo se encuentra con la cara.
           ctx.save();
@@ -361,7 +423,7 @@
           V.decal(ctx, rig, Hd.at, st.bangs.map(([phi, l]) => [l + 0.06, clampPhi(rig, phi), 0]).concat(topEdge),
             { fill: U.rgba(U.shade(rig.skinColor, -0.5), 0.3), clip: Hd.skull, smooth: true, minVis: 0.25 });
         }
-        for (const cl of clumpSet(rig, Hd, st, id).front) drawClump(ctx, rig, cl.P, cl.w, c.main, cl.root);
+        drawClumps(ctx, rig, clumpSet(rig, Hd, st, id).front, c.main, rig.detail === 'high' ? hairRing(rig, Hd, st) : null);
       },
 
       items(rig, c, body) {
@@ -369,7 +431,7 @@
         const hz = V.proj(rig, H.c).z;
         const zOf = (p, front) => (V.proj(rig, p).z - hz > (front ? -0.2 : 0.3) * H.w ? 1004 : -500);
         const back = clumpSet(rig, Hd, st, id).back;
-        if (back.length) out.push({ z: -450, draw: (ctx) => { for (const cl of back) drawClump(ctx, rig, cl.P, cl.w, U.shade(c.main, -0.05), cl.root); } });
+        if (back.length) out.push({ z: -450, draw: (ctx) => drawClumps(ctx, rig, back, U.shade(c.main, -0.05), null) });
         if (st.sheet) {
           const vol = sheetVol(rig, Hd, st, e);
           out.push({ z: vol.z, draw: (ctx) => V.fill(ctx, rig, vol, U.shade(c.main, -0.06), { mat: 'hair', cast: 0.006 }) });

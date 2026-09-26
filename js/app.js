@@ -544,7 +544,7 @@
     const sex = r() < 0.5 ? 'f' : 'm';
     ch.body = {
       sex,
-      heads: +(3 + r() * 4.5).toFixed(1),
+      heads: +(3.5 + r() * 3.5).toFixed(1),
       height: +(0.85 + r() * 0.15).toFixed(2),
       build: +(0.85 + r() * 0.35).toFixed(2),
       muscle: +(r() * 0.8).toFixed(2),
