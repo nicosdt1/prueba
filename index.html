@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forja de Sprites</title>
+  <meta name="description" content="Creador modular de personajes y sprites 2D para novelas visuales y juegos de pixel art.">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <h1>Forja de Sprites</h1>
+    </div>
+    <div class="mode" role="tablist" aria-label="Modo">
+      <button role="tab" data-mode="vn" class="active">Novela visual</button>
+      <button role="tab" data-mode="pixel">Juego · pixel art</button>
+    </div>
+    <div class="actions">
+      <input id="charName" class="name" type="text" value="Personaje" aria-label="Nombre del personaje" maxlength="40">
+      <button id="btnRandom" title="Personaje aleatorio">🎲 Aleatorio</button>
+      <button id="btnSave" title="Guardar personaje (.json)">💾 Guardar</button>
+      <label class="btn" title="Cargar personaje (.json)">📂 Cargar<input id="fileLoad" type="file" accept=".json,application/json" hidden></label>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel editor" id="editor" aria-label="Editor de personaje"></aside>
+
+    <section class="stage-wrap">
+      <div class="stage" id="stage">
+        <canvas id="view"></canvas>
+      </div>
+      <div class="anim-bar">
+        <button id="btnPlay" class="icon" title="Reproducir / pausar (espacio)" aria-label="Reproducir o pausar">❚❚</button>
+        <div class="chips" id="animChips"></div>
+        <span class="frame-info" id="frameInfo">1/1</span>
+      </div>
+    </section>
+
+    <aside class="panel output" aria-label="Salida y exportación">
+      <div id="vnOptions">
+        <h2>Novela visual</h2>
+        <label class="row">Encuadre
+          <select id="vnFrame">
+            <option value="full">Cuerpo completo</option>
+            <option value="bust">Busto</option>
+          </select>
+        </label>
+        <label class="row">Resolución
+          <select id="vnScale">
+            <option value="1">600 × 1000</option>
+            <option value="2" selected>1200 × 2000</option>
+            <option value="3">1800 × 3000</option>
+          </select>
+        </label>
+        <label class="row">Líneas
+          <select id="lineMode">
+            <option value="colored">Del color de la pieza</option>
+            <option value="dark">Oscuras</option>
+          </select>
+        </label>
+        <label class="row">Grosor de línea
+          <input id="lineWidth" type="range" min="0" max="2" step="0.1" value="1">
+        </label>
+        <div class="export">
+          <button data-export="vn-png">PNG de la pose actual</button>
+          <button data-export="vn-expr">Pack de expresiones (ZIP + Ren'Py)</button>
+          <button data-export="vn-sheet">Hoja de animación (ZIP)</button>
+        </div>
+      </div>
+
+      <div id="pxOptions" hidden>
+        <h2>Juego · pixel art</h2>
+        <label class="row">Tamaño del fotograma
+          <select id="pxSize">
+            <option>32x32</option>
+            <option>32x48</option>
+            <option selected>48x64</option>
+            <option>64x64</option>
+            <option>64x96</option>
+            <option>96x128</option>
+          </select>
+        </label>
+        <label class="check"><input id="pxChibi" type="checkbox" checked> Proporciones chibi</label>
+        <label class="check"><input id="pxOutline" type="checkbox" checked> Contorno exterior</label>
+        <label class="check"><input id="pxInner" type="checkbox" checked> Líneas interiores</label>
+        <label class="row">Escala al exportar
+          <select id="pxExportScale">
+            <option value="1" selected>×1 (tamaño real)</option>
+            <option value="2">×2</option>
+            <option value="4">×4</option>
+          </select>
+        </label>
+        <div class="export">
+          <button data-export="px-png">PNG del fotograma</button>
+          <button data-export="px-sheet">Hoja de sprites + JSON (ZIP)</button>
+        </div>
+      </div>
+
+      <h3>Animaciones a exportar</h3>
+      <div class="anim-checks" id="animChecks"></div>
+      <p class="hint">Todo funciona en el navegador con Canvas 2D, sin tarjeta gráfica dedicada ni conexión a internet.</p>
+      <p class="status" id="status" role="status"></p>
+    </aside>
+  </main>
+
+  <script src="js/core/util.js"></script>
+  <script src="js/core/skeleton.js"></script>
+  <script src="js/core/registry.js"></script>
+  <script src="js/core/animations.js"></script>
+  <script src="js/core/renderer.js"></script>
+  <script src="js/core/exporter.js"></script>
+  <script src="js/parts/body.js"></script>
+  <script src="js/parts/eyes.js"></script>
+  <script src="js/parts/hair.js"></script>
+  <script src="js/parts/clothes.js"></script>
+  <script src="js/parts/accessories.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
