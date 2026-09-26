@@ -193,11 +193,28 @@
   }
 
   // ---------- Dibujo ----------
+  // Rubor cálido de la piel (mejillas, rodillas, codos, hombros): un toque
+  // típico de la ilustración anime que da vida a la piel.
+  function warm(ctx, rig, at, level, phi, radius, clipVol, alpha = 0.22) {
+    if (rig.detail !== 'high' || SC.ID) return;
+    const s = at(level), p = V.surf(s, phi, 0);
+    if (V.facing(rig, s, p) < 0.15) return;
+    const q = V.proj(rig, p);
+    ctx.save();
+    V.clip(ctx, clipVol);
+    const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, radius);
+    g.addColorStop(0, `rgba(255,120,120,${alpha})`);
+    g.addColorStop(1, 'rgba(255,120,120,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(q.x - radius, q.y - radius, radius * 2, radius * 2);
+    ctx.restore();
+  }
+
   function detail(rig, skin, k = 0.32) { return U.shade(skin, -k); }
 
   function drawTorsoSkin(ctx, rig, c, T) {
     const skin = c.skin, L = T.L, lw = rig.line * 0.7;
-    V.fill(ctx, rig, T.vol, skin, { shadeK: 0.3 });
+    V.fill(ctx, rig, T.vol, skin, { mat: 'skin' });
     if (rig.detail !== 'high') return;
     const at = T.at, col = detail(rig, skin), clip = T.vol;
     const dl = (pts, w = lw, cc = col, thr) => V.dline(ctx, rig, at, pts, cc, w, { clip, thr });
@@ -247,7 +264,8 @@
   }
 
   function drawLeg(ctx, rig, c, Lg) {
-    V.fill(ctx, rig, Lg.vol, c.skin);
+    V.fill(ctx, rig, Lg.vol, c.skin, { mat: 'skin' });
+    warm(ctx, rig, Lg.at, 1.0, 0, rig.dim.legR * 0.9, Lg.vol, 0.2);
     if (rig.detail === 'high') {
       // Rótula y tobillo
       const col = detail(rig, c.skin);
@@ -256,7 +274,7 @@
     }
     if (!rig.hasShoes) {
       const fv = Lg.footVol();
-      V.fill(ctx, rig, fv, c.skin);
+      V.fill(ctx, rig, fv, c.skin, { mat: 'skin' });
       if (rig.detail === 'high') {
         // Dedos
         for (const p of [-0.45, -0.1, 0.25]) {
@@ -267,7 +285,9 @@
   }
 
   function drawArm(ctx, rig, c, A) {
-    V.fill(ctx, rig, A.vol, c.skin);
+    V.fill(ctx, rig, A.vol, c.skin, { mat: 'skin', cast: 0.009 });
+    warm(ctx, rig, A.at, 1.0, Math.PI, rig.dim.armR * 0.9, A.vol, 0.18);
+    warm(ctx, rig, A.at, 0.05, 1.2, rig.dim.armR * 1.1, A.vol, 0.14);
     if (rig.detail === 'high') {
       const col = U.rgba(detail(rig, c.skin), 0.6);
       // Pliegue del codo y línea del deltoides
@@ -296,7 +316,7 @@
     const t2 = Vc.madd(Vc.madd(Vc.madd(A.wrist, thumbSide, 0.3 * L), dh, 0.52 * L), n, 0.15 * L);
     const thumb = V.tube(rig, [t0, t1, t2], [0.085 * L, 0.07 * L, 0.055 * L], 0.85, 10);
     const both = V.merge(palm, thumb);
-    V.fill(ctx, rig, both, c.skin, { shadeK: 0.25 });
+    V.fill(ctx, rig, both, c.skin, { mat: 'skin', cast: 0.005 });
     if (rig.detail === 'high' && !fist) {
       const col = detail(rig, c.skin, 0.4);
       for (const p of [-0.5, 0, 0.5]) {
@@ -307,9 +327,10 @@
   }
 
   function drawHead(ctx, rig, c, Hd) {
-    V.fill(ctx, rig, Hd.vol, c.skin, { shadeK: 0.22, shadeAmt: 0.13 });
+    V.fill(ctx, rig, Hd.vol, c.skin, { mat: 'skin', cast: 0.014, bias: -0.28 });
     if (rig.detail !== 'high') return;
     const at = Hd.at, F = rig.face;
+    for (const s of [-1, 1]) warm(ctx, rig, at, F.eye + 0.14, s * (F.eyePhi + 0.12), rig.head.w * 0.28, Hd.vol, rig.fem ? 0.2 : 0.1);
     // Pómulo y mandíbula (más marcados en cuerpos masculinos y realistas)
     const k = (1 - rig.chibi) * (rig.fem ? 0.4 : 1);
     if (k > 0.2) {
@@ -320,7 +341,7 @@
   }
 
   function drawEar(ctx, rig, c, ear) {
-    V.fill(ctx, rig, ear.vol, c.skin, { shadeK: 0.3 });
+    V.fill(ctx, rig, ear.vol, c.skin, { mat: 'skin' });
     if (rig.detail === 'high' && ear.front) {
       const s = ear.secs[ear.secs.length - 2];
       const p = V.proj(rig, s.c);

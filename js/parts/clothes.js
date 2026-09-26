@@ -49,7 +49,7 @@
     return { vol: V.fromSections(rig, secs, 20), at };
   }
 
-  function fill(ctx, rig, vol, color, o) { V.fill(ctx, rig, vol, color, Object.assign({ shadeK: 0.3 }, o)); }
+  function fill(ctx, rig, vol, color, o) { V.fill(ctx, rig, vol, color, Object.assign({ cast: 0.007 }, o)); }
   const neckRound = (L, depth = 0.03) => (phi) => L.neckBase + 0.03 + depth * Math.pow(Math.max(0, Math.cos(phi)), 2);
 
   function sleeve(ctx, rig, A, color, l1, e, cuff) {
@@ -227,7 +227,7 @@
       const cloth = garment(rig, T, { e: E(rig, 1.5), top: () => L.neckTop + 0.12, hemY: T.at(L.hip2).c.y + rig.legLen * 0.22, flare: 1.1 });
       fill(ctx, rig, cloth, c.cloth);
       const plate = garment(rig, T, { e: E(rig, 5), top: neckRound(L, 0.02), hemL: L.navel + 0.02 });
-      fill(ctx, rig, plate, c.main, { shadeK: 0.4, shadeAmt: 0.25 });
+      fill(ctx, rig, plate, c.main, { mat: 'metal' });
       if (rig.detail === 'high') {
         V.decal(ctx, rig, T.at, [[L.armpit, -0.7, E(rig, 5)], [L.armpit, -0.35, E(rig, 5)], [L.underbust, -0.3, E(rig, 5)], [L.underbust, -0.65, E(rig, 5)]], { fill: U.rgba('#ffffff', 0.45), clip: plate });
       }
@@ -237,14 +237,14 @@
       tr(V.curvePts(20, (t) => [L.navel, U.lerp(-PI, PI, t)]), 2.2);
       // Faldar de placas
       const fauld = skirt(rig, T, E(rig, 6), L.navel + 0.01, T.at(L.hip2).c.y + rig.legLen * 0.1, 1.15, 0);
-      fill(ctx, rig, fauld.vol, U.shade(c.main, -0.05), { shadeK: 0.4, shadeAmt: 0.22 });
+      fill(ctx, rig, fauld.vol, U.shade(c.main, -0.05), { mat: 'metal' });
       folds(ctx, rig, fauld.at, [-1.2, -0.4, 0.4, 1.2].map((p) => [[0.1, p], [1, p]]).concat([V.curvePts(16, (t) => [0.5, U.lerp(-PI, PI, t)])]), c.main, fauld.vol);
     },
     arm(ctx, rig, c, A) {
       sleeve(ctx, rig, A, c.cloth, 1.9, E(rig, 1.8));
-      fill(ctx, rig, A.shell(E(rig, 4), 1.4, 1.93), c.main, { shadeK: 0.4, shadeAmt: 0.25 });
+      fill(ctx, rig, A.shell(E(rig, 4), 1.4, 1.93), c.main, { mat: 'metal' });
       const pauldron = A.shell((l) => rig.dim.armR * (0.75 - 0.9 * Math.max(0, l)), A.capL, 0.42);
-      fill(ctx, rig, pauldron, c.main, { shadeK: 0.4, shadeAmt: 0.25 });
+      fill(ctx, rig, pauldron, c.main, { mat: 'metal' });
       V.dline(ctx, rig, A.at, V.curvePts(12, (t) => [0.38, U.lerp(-PI, PI, t), rig.dim.armR * (0.75 - 0.9 * 0.38)]), c.trim, rig.line * 1.4, { clip: pauldron, thr: 0 });
     },
   });
@@ -331,7 +331,10 @@
   // ---------- Parte inferior ----------
   function pantsTorso(ctx, rig, c, T, e) {
     const L = T.L;
-    const vol = T.shell(e, L.waist + 0.01, 1, { topFn: (p) => L.waist + 0.01 + 0.015 * Math.cos(p) });
+    const vol = T.shell(e, L.waist + 0.01, 1, {
+      topFn: (p) => L.waist + 0.01 + 0.015 * Math.cos(p),
+      botFn: (p) => U.lerp(1.03, L.hip2, Math.pow(Math.abs(Math.sin(p)), 1.5)),
+    });
     fill(ctx, rig, vol, c.main);
     V.dline(ctx, rig, T.at, [[L.waist + 0.04, 0.05, e], [L.crotch - 0.01, 0.02, e]], U.rgba(U.shade(c.main, -0.4), 0.8), rig.line * 0.6, { clip: vol });
     V.dline(ctx, rig, T.at, V.curvePts(20, (t) => [L.waist + 0.03 + 0.015 * Math.cos(U.lerp(-PI, PI, t)), U.lerp(-PI, PI, t), e]), U.rgba(U.shade(c.main, -0.4), 0.6), rig.line * 0.5, { clip: vol });
@@ -402,7 +405,7 @@
     leg(ctx, rig, c, Lg) {
       const e = E(rig, 3.5);
       const shaft = Lg.shell((l) => e + E(rig, 1.5) * (l < 1.45 ? 1 : 0), 1.35, 2);
-      fill(ctx, rig, shaft, c.main);
+      fill(ctx, rig, shaft, c.main, { mat: 'leather' });
       fill(ctx, rig, Lg.shell(e * 1.6, 1.35, 1.42), U.shade(c.main, 0.12), { shadeK: 0.2 });
       fill(ctx, rig, shoeVol(rig, Lg, e * 1.1, -e * 0.3).vol, U.shade(c.main, -0.45));
       fill(ctx, rig, shoeVol(rig, Lg, e, e * 0.5).vol, c.main);
@@ -414,7 +417,7 @@
     leg(ctx, rig, c, Lg) {
       const e = E(rig, 2.5);
       const sh = shoeVol(rig, Lg, e, 0);
-      fill(ctx, rig, sh.vol, c.main);
+      fill(ctx, rig, sh.vol, c.main, { mat: 'leather' });
       if (rig.detail === 'high') V.decal(ctx, rig, sh.at, [[0.55, -0.25], [0.7, -0.1], [0.72, -0.3]], { fill: U.rgba('#ffffff', 0.5), clip: sh.vol, minVis: 0.3 });
     },
   });

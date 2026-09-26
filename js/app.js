@@ -50,6 +50,7 @@
     frame: 0,
     exportAnims: new Set(['idle', 'walk', 'run', 'jump', 'wave', 'attack']),
     pxCache: { key: '', frames: [] },
+    vnCache: { key: '', frames: [] },
   };
 
   // ---------- Persistencia ----------
@@ -295,8 +296,17 @@
     if (state.mode === 'vn') {
       const box = $('vnFrame').value === 'bust' ? SC.render.bustBox(state.ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
       const k = Math.min(W / box.w, H / box.h) * 0.94;
-      vctx.setTransform(k, 0, 0, k, (W - box.w * k) / 2 - box.x * k, (H - box.h * k) / 2 - box.y * k);
-      SC.render.drawCharacter(vctx, state.ch, currentPose(), SC.render.vnDrawOpts(state.ch, { view: state.view }));
+      // Caché de fotogramas: tras la primera vuelta la animación no se recalcula.
+      const key = JSON.stringify([state.ch, state.view, state.anim, W, H, $('vnFrame').value]);
+      if (state.vnCache.key !== key) state.vnCache = { key, frames: [] };
+      const fi = state.frame % anim.frames;
+      let fr = state.vnCache.frames[fi];
+      if (!fr) {
+        fr = SC.render.makeCanvas(W, H);
+        SC.render.paintVN(fr.getContext('2d'), W, H, [k, 0, 0, k, (W - box.w * k) / 2 - box.x * k, (H - box.h * k) / 2 - box.y * k], state.ch, currentPose(), { view: state.view });
+        state.vnCache.frames[fi] = fr;
+      }
+      vctx.drawImage(fr, 0, 0);
     } else {
       const frames = pixelFrames();
       const f = frames[state.frame % frames.length];

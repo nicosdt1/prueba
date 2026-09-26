@@ -111,8 +111,17 @@ js/
   definen sobre la superficie 3D y se ocultan solos cuando quedan detrás.
 - **Orden por profundidad.** Brazos, piernas, pelo, capas o alas se ordenan según su profundidad
   real tras girar, así que de espaldas la melena y la capa quedan delante del cuerpo.
-- **Pixel art.** El personaje se dibuja con menos detalle a 4× y se reduce eligiendo el color más
-  frecuente de cada bloque, lo que conserva colores planos y líneas limpias.
+- **Iluminación.** La luz se calcula con las normales reales de la superficie: sombra con
+  terminador limpio, sombra profunda, brillo según el material (piel, tela, pelo, metal, cuero),
+  degradado suave y sombras proyectadas de unas piezas sobre otras (flequillo sobre la frente,
+  cabeza sobre el cuello, mangas sobre los brazos, falda sobre las piernas). La piel lleva rubor
+  cálido en mejillas, rodillas y codos, y el contorno exterior es más grueso que las líneas
+  interiores, como en una ilustración.
+- **Pixel art.** Se hace un pase de identificadores (cada pieza con un color único) y un pase de
+  color con sombreado en 3 tonos a 4×; al reducir se elige la pieza dominante de cada bloque.
+  Después se eliminan píxeles sueltos, se colocan ojos y boca píxel a píxel y se trazan contornos
+  selectivos: por fuera y sólo entre piezas distintas (la línea va en la pieza que queda detrás),
+  así las partes del mismo material se unen sin cortes.
 
 ## Añadir una pieza nueva
 

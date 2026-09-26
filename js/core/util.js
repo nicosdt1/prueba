@@ -27,6 +27,11 @@ SC.util = (() => {
     if (amt < 0) return mix(hex, '#3a1f3f', -amt);
     return mix(hex, '#fffaf0', amt);
   }
+  // Mezcla "multiplicar" (sombras con tinte, como en ilustración digital).
+  function multiply(a, b) {
+    const A = hexToRgb(a), B = hexToRgb(b);
+    return rgbToHex((A.r * B.r) / 255, (A.g * B.g) / 255, (A.b * B.b) / 255);
+  }
   function rgba(hex, a) {
     const c = hexToRgb(hex);
     return `rgba(${c.r},${c.g},${c.b},${a})`;
@@ -56,7 +61,7 @@ SC.util = (() => {
 
   const deepClone = (o) => JSON.parse(JSON.stringify(o));
 
-  return { clamp, lerp, smoothstep, hexToRgb, rgbToHex, mix, shade, rgba, rng, curve, deepClone };
+  return { clamp, lerp, smoothstep, hexToRgb, rgbToHex, mix, shade, multiply, rgba, rng, curve, deepClone };
 })();
 
 // Vectores 3D { x, y, z }. Eje y hacia abajo (como la pantalla), z hacia el espectador.
@@ -131,20 +136,22 @@ SC.draw = (() => {
     }
     if (closed) ctx.closePath();
   }
+  // En el pase de identificadores (pixel art) cada trazo recibe un id propio.
+  const paint = (color) => (SC.ID ? SC.ID.color(color) : color);
   function stroke(ctx, color, width, build) {
     ctx.beginPath();
     build(ctx);
     ctx.lineWidth = width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = paint(color);
     ctx.stroke();
   }
   function fill(ctx, color, build) {
     ctx.beginPath();
     build(ctx);
-    ctx.fillStyle = color;
+    ctx.fillStyle = paint(color);
     ctx.fill();
   }
-  return { lineColor, ellipse, poly, smooth, stroke, fill };
+  return { lineColor, ellipse, poly, smooth, stroke, fill, paint };
 })();

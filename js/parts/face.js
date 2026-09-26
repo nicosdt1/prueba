@@ -248,6 +248,7 @@
   }
 
   function drawFeatures(ctx, rig, c, Hd) {
+    if (rig.pixel) return; // en pixel art la cara se coloca píxel a píxel
     const F = rig.face, e = rig.expr, H = rig.head;
     c = Object.assign({ skin: rig.skinColor }, c);
     const ew = H.w * (0.27 + 0.08 * rig.chibi);
@@ -298,6 +299,7 @@
       slot: 'eyes', id, name: st.name,
       colors: { iris: { label: 'Iris', value: '#3f7fd6' } },
       face(ctx, rig, c, Hd) {
+        if (rig.pixel) return;
         const F = rig.face, H = rig.head;
         const ew = H.w * (0.27 + 0.08 * rig.chibi) * (st.size || 1) * (rig.fem ? 1 : 0.94);
         const eh = ew * (st.h || 1) * 0.62;

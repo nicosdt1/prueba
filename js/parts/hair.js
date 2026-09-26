@@ -66,6 +66,10 @@
     },
   };
 
+  // Las longitudes del pelo se dan en cabezas de un cuerpo de 6,5 cabezas;
+  // en chibi la cabeza es enorme, así que se acortan para no llegar al suelo.
+  const lenK = (rig) => U.clamp(rig.body.heads / 6.5, 0.4, 1.25);
+
   // Rango de phi visible (la cara mira a la cámara cuando cos(phi + giro) > 0).
   function clampPhi(rig, phi) {
     const yawEff = rig.yaw + rig.pose.headYaw + rig.pose.twist;
@@ -114,7 +118,7 @@
   function hangVol(rig, Hd, e, t) {
     const H = rig.head, { p, n } = surfN(rig, Hd, t.level, t.phi, e);
     const nh = Vc.norm(Vc.v(n.x, 0, n.z));
-    const pts = [], N = 12, len = t.len * H.h;
+    const pts = [], N = 12, len = t.len * H.h * lenK(rig);
     for (let i = 0; i <= N; i++) {
       const k = i / N;
       const out = H.w * (0.35 * Math.sqrt(k) + (t.spread || 0.15) * k);
@@ -134,7 +138,7 @@
     const H = rig.head, sh = st.sheet;
     const top = Vc.madd(H.c, H.dirTo(Vc.v(0, 0, -1)), H.d * 0.2);
     const back = Vc.madd(H.c, H.dirTo(Vc.v(0, 0, -1)), H.d * 0.75);
-    const y0 = H.c.y - H.h * 0.25, y1 = H.c.y + H.h * 0.5 + sh.len * H.h;
+    const y0 = H.c.y - H.h * 0.25, y1 = H.c.y + H.h * 0.5 + sh.len * H.h * lenK(rig);
     const Rt = rig.R(1);
     const u = SC.mat.mv(Rt, Vc.v(1, 0, 0)), v = SC.mat.mv(Rt, Vc.v(0, 0, 1));
     const secs = [];
@@ -187,7 +191,7 @@
           SC.draw.poly(ctx, cut);
           ctx.clip('evenodd');
         }
-        V.fill(ctx, rig, vol, c.main, { shadeK: 0.35 });
+        V.fill(ctx, rig, vol, c.main, { mat: 'hair', cast: 0.01 });
         if (cut && rig.line > 0) {
           // Contorno donde el pelo se encuentra con la cara.
           ctx.save();
@@ -224,18 +228,7 @@
           }
           const P = V.project(rig, Hd.at, poly);
           if (P.filter((p) => p.f > 0.02).length / P.length > 0.25) {
-            const build = (q) => (st.soft ? SC.draw.smooth(q, P, true) : SC.draw.poly(q, P));
-            const vol = { polys: [P], rad: H.w * 0.25 };
-            if (st.soft) {
-              // Contorno suave: se dibuja con curvas.
-              ctx.lineJoin = 'round';
-              ctx.beginPath(); build(ctx);
-              ctx.lineWidth = rig.line * 2; ctx.strokeStyle = ctx.fillStyle = SC.draw.lineColor(rig, c.main);
-              ctx.stroke(); ctx.fill();
-              ctx.beginPath(); build(ctx); ctx.fillStyle = c.main; ctx.fill();
-            } else {
-              V.fill(ctx, rig, vol, c.main, { shadeK: 0.5 });
-            }
+            V.fill(ctx, rig, { polys: [P], rad: H.w * 0.25 }, c.main, { mat: 'hair', cast: 0.006 });
             if (rig.detail === 'high') {
               const dk = U.rgba(U.shade(c.main, -0.45), 0.8);
               for (let i = 1; i < st.bangs.length - 1; i += 2) {
@@ -253,19 +246,19 @@
         const zOf = (p, front) => (V.proj(rig, p).z - hz > (front ? -0.2 : 0.3) * H.w ? 1004 : -500);
         if (st.sheet) {
           const vol = sheetVol(rig, Hd, st, e);
-          out.push({ z: vol.z, draw: (ctx) => V.fill(ctx, rig, vol, U.shade(c.main, -0.06), { shadeK: 0.3 }) });
+          out.push({ z: vol.z, draw: (ctx) => V.fill(ctx, rig, vol, U.shade(c.main, -0.06), { mat: 'hair', cast: 0.006 }) });
         }
         for (const lk of st.locks || []) {
           const h = hangVol(rig, Hd, e * 0.6, { phi: lk.phi, level: st.hairline + 0.22, len: lk.len, r: lk.w * 1.5, w: true, front: true, spread: 0.12 });
-          out.push({ z: zOf(h.pts[4], true), draw: (ctx) => V.fill(ctx, rig, h.vol, c.main, { shadeK: 0.4 }) });
+          out.push({ z: zOf(h.pts[4], true), draw: (ctx) => V.fill(ctx, rig, h.vol, c.main, { mat: 'hair', cast: 0.006 }) });
         }
         for (const t of st.tails || []) {
           const h = hangVol(rig, Hd, e, t);
           out.push({
             z: zOf(h.start, t.front),
             draw: (ctx) => {
-              V.fill(ctx, rig, h.vol, c.main, { shadeK: 0.35 });
-              if (t.tie) V.fill(ctx, rig, V.tube(rig, [h.pts[0], h.pts[1]], H.w * t.r * 0.45, 1, 10), c.tie, { shadeK: 0.3 });
+              V.fill(ctx, rig, h.vol, c.main, { mat: 'hair', cast: 0.006 });
+              if (t.tie) V.fill(ctx, rig, V.tube(rig, [h.pts[0], h.pts[1]], H.w * t.r * 0.45, 1, 10), c.tie, { mat: 'hair', cast: 0.006 });
             },
           });
         }
@@ -277,8 +270,8 @@
           out.push({
             z: zOf(cen) === 1004 ? 1004 : 999.5,
             draw: (ctx) => {
-              V.fill(ctx, rig, vol, c.main, { shadeK: 0.35 });
-              V.fill(ctx, rig, V.tube(rig, [Vc.madd(p, n, r * 0.05), Vc.madd(p, n, r * 0.3)], r * 0.5, 1, 10), c.tie, { shadeK: 0.3 });
+              V.fill(ctx, rig, vol, c.main, { mat: 'hair', cast: 0.006 });
+              V.fill(ctx, rig, V.tube(rig, [Vc.madd(p, n, r * 0.05), Vc.madd(p, n, r * 0.3)], r * 0.5, 1, 10), c.tie, { mat: 'hair', cast: 0.006 });
             },
           });
         }

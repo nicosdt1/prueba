@@ -3,7 +3,7 @@
   const U = SC.util, Vc = SC.vec, V = SC.V, D = SC.draw;
   const PI = Math.PI;
   const reg = (d) => SC.registerPart(d);
-  const fill = (ctx, rig, vol, color, o) => V.fill(ctx, rig, vol, color, Object.assign({ shadeK: 0.3 }, o));
+  const fill = (ctx, rig, vol, color, o) => V.fill(ctx, rig, vol, color, Object.assign({ cast: 0.005 }, o));
   const hairOut = (rig) => {
     const h = rig.equipped.find((p) => p.slot === 'hair');
     return rig.head.w * (h ? 0.16 : 0.02);
@@ -61,13 +61,13 @@
         ctx.rotate(0.35 * f.dir);
         for (const s of [-1, 1]) {
           D.fill(ctx, c.main, (q) => { q.moveTo(0, 0); q.bezierCurveTo(s * r * 1.2, -r * 1.3, s * r * 2, -r * 0.5, s * r * 1.6, r * 0.2); q.quadraticCurveTo(s * r * 1.2, r * 0.8, 0, 0); });
-          ctx.lineWidth = rig.line; ctx.strokeStyle = line; ctx.stroke();
+          if (rig.line > 0 && !SC.ID) { ctx.lineWidth = rig.line; ctx.strokeStyle = line; ctx.stroke(); }
           D.fill(ctx, U.shade(c.main, -0.18), (q) => D.ellipse(q, s * r * 1.15, r * 0.25, r * 0.45, r * 0.25));
           D.fill(ctx, c.main, (q) => { q.moveTo(0, 0); q.lineTo(s * r * 0.7, r * 1.4); q.lineTo(s * r * 0.2, r * 1.3); q.closePath(); });
-          ctx.stroke();
+          if (rig.line > 0 && !SC.ID) ctx.stroke();
         }
         D.fill(ctx, U.shade(c.main, -0.1), (q) => D.ellipse(q, 0, 0, r * 0.35, r * 0.4));
-        ctx.stroke();
+        if (rig.line > 0 && !SC.ID) ctx.stroke();
       });
     },
   });
@@ -100,7 +100,7 @@
         const phi = (k / 10) * 2 * PI, p = V.surf(Hd.at(0.13), phi, e);
         spikes.push(V.tube(rig, [p, Vc.add(p, H.dirTo(Vc.v(0, -H.h * 0.16, 0)))], (t) => H.w * 0.1 * (1 - t * 0.85), 0.5, 8));
       }
-      fill(ctx, rig, V.merge(band, ...spikes), c.main, { shadeK: 0.4, shadeAmt: 0.25 });
+      fill(ctx, rig, V.merge(band, ...spikes), c.main, { mat: 'metal' });
       for (const phi of [-0.6, 0, 0.6]) V.decal(ctx, rig, Hd.at, V.curvePts(8, (t) => [0.165 + 0.018 * Math.sin(t * 2 * PI), phi + 0.07 * Math.cos(t * 2 * PI), e * 1.1]), { fill: c.gem, minVis: 0.9 });
     },
   });
@@ -273,9 +273,11 @@
         out.push({
           z,
           draw: (ctx) => {
-            ctx.beginPath(); D.smooth(ctx, P, true);
-            ctx.lineWidth = rig.line * 2; ctx.strokeStyle = ctx.fillStyle = D.lineColor(rig, c.main); ctx.stroke(); ctx.fill();
-            ctx.beginPath(); D.smooth(ctx, P, true); ctx.fillStyle = c.main; ctx.fill();
+            if (rig.line > 0 && !SC.ID) {
+              ctx.beginPath(); D.smooth(ctx, P, true);
+              ctx.lineWidth = rig.line * 2; ctx.strokeStyle = ctx.fillStyle = D.lineColor(rig, c.main); ctx.stroke(); ctx.fill();
+            }
+            ctx.beginPath(); D.smooth(ctx, P, true); ctx.fillStyle = D.paint(c.main); ctx.fill();
             if (rig.detail === 'high') {
               ctx.save(); ctx.clip();
               for (let i = 1; i <= 4; i++) {
@@ -331,7 +333,7 @@
       return [{
         z,
         draw: (ctx) => {
-          fill(ctx, rig, blade, c.main, { shadeK: 0.5, shadeAmt: 0.2 });
+          fill(ctx, rig, blade, c.main, { mat: 'metal' });
           fill(ctx, rig, hilt, c.hilt);
           fill(ctx, rig, guard, '#d9b44a');
           fill(ctx, rig, V.tube(rig, [Vc.madd(a, dir, -B * 0.012), a], B * 0.016, 1, 8), '#d9b44a');

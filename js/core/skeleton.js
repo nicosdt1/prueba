@@ -85,6 +85,7 @@ SC.buildRig = function buildRig(ch, pose, opts = {}) {
     tiltCos: Math.cos(opts.tilt != null ? opts.tilt : 0.12), tiltSin: Math.sin(opts.tilt != null ? opts.tilt : 0.12),
     cx: 300, ground: SC.GROUND,
     detail: opts.detail || 'high',
+    pixel: !!opts.pixel,
     line: opts.line != null ? opts.line : 3,
     lineMode: opts.lineMode || 'colored',
     expr: opts.expr || SC.EXPRESSIONS.neutral,
@@ -123,8 +124,8 @@ SC.buildRig = function buildRig(ch, pose, opts = {}) {
     [yN - neck, d.neckR, d.neckR * 0.95, d.neckR * 0.9, d.neckR * 0.45],
     [yN - neck * 0.45, d.neckR * 1.02, d.neckR * 0.95, d.neckR * 0.95, d.neckR * 0.2],
     [yN + T * 0.005, d.neckR * mix(1.35, 1.2), d.neckR * 1.05, d.neckR * 1.05, 0],
-    [yN + T * 0.035, U.lerp(d.neckR * 1.3, d.shoulderHalf, mix(0.62, 0.48)), d.chestD * 0.55, d.backD * 0.85, -d.backD * 0.1],
-    [yN + T * 0.085 - br, d.shoulderHalf * 0.98, d.chestD * 0.72 + br, d.backD * 0.95, -d.backD * 0.08],
+    [yN + T * 0.035, U.lerp(d.neckR * 1.3, d.shoulderHalf, mix(0.62, 0.48)), Math.max(d.neckR * 1.12, d.chestD * 0.8), d.backD * 0.85, -d.backD * 0.02],
+    [yN + T * 0.085 - br, d.shoulderHalf * 0.98, d.chestD * 0.9 + br, d.backD * 0.95, -d.backD * 0.02],
     [yN + T * 0.19, d.chestHalf, d.chestD + d.pec * 0.7 + br, d.backD, 0],
     [yN + T * 0.29, d.chestHalf * mix(0.98, 0.96), d.chestD + d.pec + d.bust, d.backD * 0.96, 0],
     [yN + T * 0.38, d.chestHalf * mix(0.95, 0.9), d.chestD * 0.93 + d.pec * 0.4 + d.bust * 0.45, d.backD * 0.92, 0],
@@ -133,8 +134,8 @@ SC.buildRig = function buildRig(ch, pose, opts = {}) {
     [yN + T * 0.7, U.lerp(d.waistHalf, d.hipHalf, 0.5), d.waistD * 1.04, U.lerp(d.waistD, d.gluteD, 0.6), 0],
     [yN + T * 0.82, d.hipHalf * 0.97, d.waistD * 0.98, d.gluteD, -d.gluteD * 0.05],
     [yN + T * 0.92, d.hipHalf, d.waistD * 0.88, d.gluteD * 0.95, -d.gluteD * 0.08],
-    [yN + T * 1.0, d.hipHalf * 0.74, d.waistD * 0.62, d.gluteD * 0.72, -d.gluteD * 0.05],
-    [yN + T * 1.04, d.hipHalf * 0.22, d.waistD * 0.3, d.gluteD * 0.3, 0],
+    [yN + T * 0.98, d.hipHalf * 0.8, d.waistD * 0.66, d.gluteD * 0.8, -d.gluteD * 0.06],
+    [yN + T * 1.04, d.hipHalf * 0.42, d.waistD * 0.4, d.gluteD * 0.5, -d.gluteD * 0.04],
   ];
   const top = rows[0][0], total = rows[rows.length - 1][0] - top;
   const keys = rows.map(([y, w, f, bk, z]) => {
