@@ -38,8 +38,24 @@ SC.anatRig = (() => {
   }
 
   // 10.1 Cinemática directa. pose = { joints: { nombre: ángulos }, root: [x,y,z] }.
+  // 6.1 Ritmo escapulohumeral: por encima de 60° de abducción real, la
+  // clavícula y el omóplato acompañan (1° por cada 2° de brazo).
+  function scapular(pa) {
+    const out = Object.assign({}, pa);
+    for (const S2 of ['L', 'R']) {
+      const sh = pa['shoulder_' + S2];
+      if (!sh || sh.abd == null) continue;
+      const real = sh.abd + C.aPose, cl = Math.max(0, real - 60) / 3;
+      if (cl <= 0) continue;
+      out['shoulder_' + S2] = Object.assign({}, sh, { abd: sh.abd - cl });
+      const c0 = pa['clavicle_' + S2] || {};
+      out['clavicle_' + S2] = Object.assign({}, c0, { abd: (c0.abd || 0) + cl });
+    }
+    return out;
+  }
+
   function fk(sk, pose = {}) {
-    const order = SC.anatBody.order(sk), J = sk.joints, pa = pose.joints || {};
+    const order = SC.anatBody.order(sk), J = sk.joints, pa = scapular(pose.joints || {});
     const pos = {}, rot = {};
     for (const n of order) {
       const a = clampJoint(n, pa[n] || {});
@@ -134,31 +150,33 @@ SC.anatRig = (() => {
     return cm[0] >= Math.min(...xs) - 0.05 && cm[0] <= Math.max(...xs) + 0.05 && cm[2] >= Math.min(...zs) - 0.05 && cm[2] <= Math.max(...zs) + 0.05;
   }
 
-  // ---------- Animaciones procedurales ----------
-  const sin = Math.sin, cos = Math.cos, TAU = Math.PI * 2;
-  const pos0 = (x) => Math.max(0, x);
-  const relaxedArms = (j, br = 0) => {
-    j.shoulder_L = { abd: -9 + br, flex: 4 }; j.shoulder_R = { abd: -12 + br, flex: -3 };
-    j.elbow_L = { flex: 14 }; j.elbow_R = { flex: 8 };
-  };
+  // ---------- Poses y animación (sección 10 de docs/correccion-visual.md) ----------
+  const sin = Math.sin, TAU = Math.PI * 2;
+  const A0 = C.aPose; // la A-pose (20°) es sólo de construcción: los ángulos se dan en absoluto
 
-  // 8.4 Contrapposto: peso en la pierna izquierda, pelvis y hombros inclinados
-  // en sentidos opuestos, rodilla libre flexionada; la pelvis se desplaza hasta
-  // que el centro de masas cae sobre el tobillo de apoyo.
-  function idle(sk, t) {
-    const br = sin(t * TAU);
-    const j = {
-      pelvis: { roll: 6 }, spine: { roll: -4, flex: 1 }, chest: { roll: -6, flex: -1 - br * 0.6 },
-      neck: { roll: 3, pitch: 2 }, head: { roll: 4, yaw: -4, pitch: 2 },
-      // Las caderas compensan la inclinación de la pelvis: las piernas siguen verticales.
-      // La pierna libre se acorta (rodilla flexionada) y el pie apoya la punta.
-      hip_L: { abd: -2, roll: -6 }, hip_R: { flex: 10, abd: 4, roll: -6 }, knee_R: { flex: 24 }, ankle_R: { flex: -8 },
-      clavicle_L: { abd: br * 0.8 }, clavicle_R: { abd: br * 0.8 },
+  // 10.1 Reposo: hombros a 7°, clavícula caída 3°, codos 12°, muñeca 10°,
+  // contrapposto con contrarrotación, cabeza ladeada 3° y girada 5°, pies
+  // separados 0.30 H (hombre) / 0.20 H (mujer) con las puntas abiertas 7°.
+  function restJoints(sk, br = 0) {
+    const s = sk.params.s;
+    const footSep = M.lerp(0.30, 0.20, s), ankleX = sk.joints.ankle_L.rest[0];
+    const legLen = sk.joints.hip_L.rest[1] - sk.joints.ankle_L.rest[1];
+    const adduct = M.deg(Math.atan2(ankleX - footSep / 2, legLen));
+    return {
+      pelvis: { roll: 6, yaw: 3 }, spine: { roll: -4, flex: 1, yaw: -3 }, chest: { roll: -6, flex: -1 - br * 0.6, yaw: -4 },
+      neck: { roll: 1, pitch: 2 }, head: { roll: 3, yaw: 5, pitch: 2 },
+      clavicle_L: { abd: -3 + br * 0.6 }, clavicle_R: { abd: -3 + br * 0.6 },
+      shoulder_L: { abd: 7 - A0, flex: 3 }, shoulder_R: { abd: 8 - A0, flex: -2 },
+      elbow_L: { flex: 12 }, elbow_R: { flex: 14 }, wrist_L: { flex: 10 }, wrist_R: { flex: 10 },
+      hip_L: { abd: -adduct, roll: -6, yaw: 7 }, hip_R: { flex: 10, abd: -adduct + 4, roll: -6, yaw: 7 },
+      knee_R: { flex: 22 }, ankle_R: { flex: -8 },
     };
-    relaxedArms(j, br);
-    const pose = { joints: j, root: [0, 0, 0], stance: 'L' };
-    // Lleva el centro de masas sobre el tobillo de apoyo sin mover los pies:
-    // se inclinan las dos piernas en la cadera (la pelvis se desplaza encima).
+  }
+
+  // 8.4 Contrapposto: el centro de masas se lleva sobre el tobillo de apoyo
+  // inclinando las dos piernas en la cadera (los pies no se mueven).
+  function balance(sk, pose) {
+    const j = pose.joints;
     const legLen = sk.joints.hip_L.rest[1] - sk.joints.ankle_L.rest[1];
     for (let it = 0; it < 3; it++) {
       const f = ground(sk, pose), d = f.pos.ankle_L[0] - centerOfMass(f)[0];
@@ -168,76 +186,129 @@ SC.anatRig = (() => {
     return pose;
   }
 
-  // 10.4 Ciclo de andar (pierna izquierda con fase φ; derecha φ + π).
-  function walk(sk, t, run = false) {
-    const W = C.walk, s = sk.params.s;
-    const Ah = run ? 42 : W.Ah, Ak = run ? 100 : W.Ak, Aa = (run ? 38 : W.Aa) * M.lerp(W.armM, 1, s);
-    const phi = t * TAU;
-    const leg = (p) => ({ hip: Ah * sin(p), knee: 5 + Ak * Math.pow(pos0(cos(p)), 1.5), ankle: 10 * sin(p - Math.PI / 2) });
-    const Lg = leg(phi), Rg = leg(phi + Math.PI);
-    const roll = M.dimorph(W.roll, s, 1);
+  function idle(sk, t) {
+    const br = sin(t * TAU);
+    const pose = { joints: restJoints(sk, br), root: [0, 0, 0], stance: 'L', hands: { L: 'relajada', R: 'relajada' } };
+    return balance(sk, pose);
+  }
+
+  // Interpolación Catmull-Rom cíclica entre poses clave (10.2–10.3).
+  function keyframes(keys, t) {
+    const n = keys.length, x = (((t % 1) + 1) % 1) * n, i = Math.floor(x), u = x - i;
+    const k0 = keys[(i - 1 + n) % n], k1 = keys[i], k2 = keys[(i + 1) % n], k3 = keys[(i + 2) % n];
+    const out = {};
+    for (const key of Object.keys(k1)) {
+      const p0 = k0[key], p1 = k1[key], p2 = k2[key], p3 = k3[key];
+      out[key] = 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
+    }
+    return out;
+  }
+  // Espejo de una pose clave (segunda mitad del ciclo).
+  const mirror = (k) => ({ hL: k.hR, kL: k.kR, aL: k.aR, hR: k.hL, kR: k.kL, aR: k.aL, sL: k.sR, eL: k.eR, sR: k.sL, eR: k.eL, py: k.py, tw: -k.tw });
+
+  // 10.2 Andar por poses clave (pierna izquierda y brazo derecho adelantados).
+  // La tabla da cadera, rodilla y tobillo de la pierna izquierda; la pierna
+  // de apoyo (D) y los brazos cuelgan del hombro (nunca más de 25° delante).
+  const WALK = [
+    { hL: 25, kL: 5, aL: -15, hR: -15, kR: 10, aR: 8, sR: 18, eR: 25, sL: -14, eL: 12, py: 0, tw: 5 },
+    { hL: 20, kL: 20, aL: 0, hR: -10, kR: 30, aR: 12, sR: 12, eR: 20, sL: -10, eL: 12, py: -0.03, tw: 4 },
+    { hL: 0, kL: 10, aL: 0, hR: 5, kR: 60, aR: -5, sR: 0, eR: 15, sL: 0, eL: 15, py: 0.02, tw: 0 },
+    { hL: -10, kL: 5, aL: 20, hR: 20, kR: 40, aR: -10, sR: -10, eR: 15, sL: 10, eL: 20, py: 0, tw: -4 },
+  ];
+  // 10.3 Correr: tronco inclinado 12°, rodilla que avanza hasta 100°, codos a 85°, brazos ±35°.
+  const RUN = [
+    { hL: 40, kL: 25, aL: -10, hR: -25, kR: 40, aR: 25, sR: 35, eR: 85, sL: -30, eL: 85, py: 0, tw: 8 },
+    { hL: 30, kL: 45, aL: 5, hR: -10, kR: 70, aR: 10, sR: 20, eR: 85, sL: -20, eL: 85, py: -0.04, tw: 5 },
+    { hL: 0, kL: 30, aL: 15, hR: 55, kR: 100, aR: -5, sR: 0, eR: 85, sL: 0, eL: 85, py: 0.08, tw: 0 },
+    { hL: -20, kL: 40, aL: 25, hR: 60, kR: 60, aR: -10, sR: -25, eR: 85, sL: 25, eL: 85, py: 0.12, tw: -6 },
+  ];
+  function locomotion(sk, t, table, run) {
+    const s = sk.params.s;
+    const keys = table.concat(table.map(mirror));
+    const k = keyframes(keys, t);
+    const armK = M.lerp(1.2, 1, s);
     const narrow = s * 2;
+    const roll = M.dimorph(C.walk.roll, s, 1) * (run ? 0.6 : 1) * Math.cos(t * TAU);
     const j = {
-      pelvis: { yaw: W.pelvisYaw * sin(phi), roll: -roll * cos(phi), flex: run ? 8 : 2 },
-      spine: { yaw: -(W.pelvisYaw + W.shoulderYaw) * 0.5 * sin(phi), flex: run ? 6 : 1 },
-      chest: { yaw: -(W.pelvisYaw + W.shoulderYaw) * 0.5 * sin(phi), roll: roll * 0.5 * cos(phi) },
-      head: { yaw: -W.pelvisYaw * 0.4 * sin(phi), pitch: run ? -6 : 0 },
-      hip_L: { flex: Lg.hip, abd: -narrow, roll: roll * cos(phi) }, knee_L: { flex: Lg.knee }, ankle_L: { flex: Lg.ankle },
-      hip_R: { flex: Rg.hip, abd: -narrow, roll: roll * cos(phi) }, knee_R: { flex: Rg.knee }, ankle_R: { flex: Rg.ankle },
-      shoulder_L: { flex: -Aa * sin(phi), abd: -4 }, shoulder_R: { flex: Aa * sin(phi), abd: -4 },
-      elbow_L: { flex: run ? 85 : 15 + 10 * pos0(sin(phi)) }, elbow_R: { flex: run ? 85 : 15 + 10 * pos0(-sin(phi)) },
+      pelvis: { yaw: 6 * sin(t * TAU), roll: -roll, flex: run ? 10 : 2 },
+      spine: { yaw: -3 * sin(t * TAU) - k.tw * 0.5, flex: run ? 8 : 1 },
+      chest: { yaw: -4 * sin(t * TAU) - k.tw * 0.5, roll: roll * 0.5 },
+      // La cabeza compensa la mitad del giro de los hombros y mira al frente.
+      head: { yaw: 4 * sin(t * TAU) + k.tw * 0.5, pitch: run ? -8 : 0 },
+      hip_L: { flex: k.hL, abd: -narrow, roll }, knee_L: { flex: k.kL }, ankle_L: { flex: k.aL },
+      hip_R: { flex: k.hR, abd: -narrow, roll }, knee_R: { flex: k.kR }, ankle_R: { flex: k.aR },
+      shoulder_L: { flex: Math.min(25, k.sL * armK), abd: 8 - A0 }, shoulder_R: { flex: Math.min(25, k.sR * armK), abd: 8 - A0 },
+      elbow_L: { flex: k.eL }, elbow_R: { flex: k.eR }, wrist_L: { flex: 10 }, wrist_R: { flex: 10 },
+      clavicle_L: { abd: -3 }, clavicle_R: { abd: -3 },
     };
-    const pose = { joints: j, hands: { L: run ? 'puno' : 'relajada', R: run ? 'puno' : 'relajada' } };
-    if (run) pose.lift = 0.12 * pos0(sin(2 * phi + 0.6));
-    return pose;
+    if (run) { j.shoulder_L.flex = k.sL; j.shoulder_R.flex = k.sR; }
+    return { joints: j, lift: run ? Math.max(0, k.py) : 0, hands: { L: run ? 'puno' : 'relajada', R: run ? 'puno' : 'relajada' } };
+  }
+  const walk = (sk, t, run = false) => locomotion(sk, t, run ? RUN : WALK, run);
+
+  // Interpolación lineal entre poses clave (animaciones que no son ciclos).
+  function sequence(keys, t) {
+    let a = keys[0], b = keys[keys.length - 1], u = 0;
+    for (let i = 0; i < keys.length - 1; i++) if (t >= keys[i].t && t <= keys[i + 1].t) { a = keys[i]; b = keys[i + 1]; u = (t - a.t) / Math.max(1e-6, b.t - a.t); break; }
+    const e = u * u * (3 - 2 * u), out = {};
+    for (const key of Object.keys(a)) if (key !== 't') out[key] = a[key] + (b[key] - a[key]) * e;
+    return out;
   }
 
+  // 10.3 Saltar: anticipación, impulso, aire, caída y recuperación.
+  const JUMP = [
+    { t: 0, k: 5, h: 5, sh: 0, lift: 0, a: 0 }, { t: 0.2, k: 60, h: 50, sh: -40, lift: 0, a: -20 },
+    { t: 0.35, k: 0, h: 0, sh: 150, lift: 0.3, a: 30 }, { t: 0.6, k: 40, h: 35, sh: 120, lift: 1.1, a: 15 },
+    { t: 0.8, k: 50, h: 45, sh: 30, lift: 0, a: -10 }, { t: 1, k: 8, h: 6, sh: 0, lift: 0, a: 0 },
+  ];
   function jump(sk, t) {
-    // Agacharse → impulso → aire → caída.
-    const k = t < 0.25 ? t / 0.25 : t < 0.4 ? 1 - (t - 0.25) / 0.15 : t < 0.8 ? 0 : (t - 0.8) / 0.2;
-    const air = t >= 0.4 && t < 0.85 ? sin(((t - 0.4) / 0.45) * Math.PI) : 0;
-    const tuck = air * 0.6;
+    const k = sequence(JUMP, t);
     const j = {
-      pelvis: { flex: 10 * k }, spine: { flex: 10 * k }, chest: { flex: 6 * k - 6 * air }, head: { pitch: -8 * k },
-      hip_L: { flex: 70 * k + 50 * tuck }, hip_R: { flex: 70 * k + 50 * tuck },
-      knee_L: { flex: 110 * k + 80 * tuck }, knee_R: { flex: 110 * k + 80 * tuck },
-      ankle_L: { flex: -30 * k + 30 * air }, ankle_R: { flex: -30 * k + 30 * air },
-      shoulder_L: { flex: -40 * k + 150 * air, abd: 10 + 20 * air }, shoulder_R: { flex: -40 * k + 150 * air, abd: 10 + 20 * air },
-      elbow_L: { flex: 20 + 20 * air }, elbow_R: { flex: 20 + 20 * air },
+      pelvis: { flex: k.h * 0.2 }, spine: { flex: k.h * 0.2 }, chest: { flex: k.h * 0.1 }, head: { pitch: -k.h * 0.15 },
+      hip_L: { flex: k.h, abd: -2 }, hip_R: { flex: k.h, abd: -2 }, knee_L: { flex: k.k }, knee_R: { flex: k.k },
+      ankle_L: { flex: k.a }, ankle_R: { flex: k.a },
+      shoulder_L: { flex: k.sh, abd: 12 - A0 }, shoulder_R: { flex: k.sh, abd: 12 - A0 }, elbow_L: { flex: 20 }, elbow_R: { flex: 20 },
     };
-    return { joints: j, lift: 1.1 * air, hands: { L: 'abierta', R: 'abierta' } };
+    return { joints: j, lift: k.lift, hands: { L: 'abierta', R: 'abierta' } };
   }
 
+  // 10.3 Saludar: hombro a 110° (no 180°), codo a 100° con el antebrazo vertical,
+  // palma al frente, muñeca ±20° a 2 Hz y cabeza ladeada 5° hacia el saludo.
   function wave(sk, t) {
     const p = idle(sk, t * 0.5);
     const sw = sin(t * TAU * 2);
     Object.assign(p.joints, {
-      shoulder_R: { abd: 145, flex: 15 }, elbow_R: { flex: 55 + 25 * sw, yaw: 0 }, wrist_R: { flex: 10 * sw },
-      head: { roll: 8, pitch: -2, yaw: -6 },
+      shoulder_R: { abd: 110 - A0, flex: 12 }, elbow_R: { flex: 100, yaw: 0 }, wrist_R: { flex: 20 * sw, roll: 0 },
+      head: { roll: -5, pitch: -2, yaw: -6 },
     });
     p.hands = { L: 'relajada', R: 'abierta' };
     p.face = { mouth_smile: 0.8, eye_smile: 0.6, brow_up: 0.3 };
     return p;
   }
 
+  // 10.3 Atacar: anticipación (2 fotogramas), golpe (1), continuación (2) y
+  // recuperación (3). En el golpe el tronco gira 30°, el pie delantero avanza,
+  // el brazo se extiende con el codo a 10° y el peso pasa a la pierna delantera.
+  const ATTACK = [
+    { t: 0, tw: 0, sh: 0, ab: 10, el: 30, hl: 0, kl: 10, hr: 0, kr: 10 },
+    { t: 0.25, tw: 20, sh: -35, ab: 45, el: 100, hl: 5, kl: 25, hr: -5, kr: 25 },
+    { t: 0.375, tw: -30, sh: 90, ab: 20, el: 10, hl: 30, kl: 30, hr: -20, kr: 10 },
+    { t: 0.625, tw: -35, sh: 70, ab: 15, el: 20, hl: 32, kl: 35, hr: -22, kr: 12 },
+    { t: 1, tw: 0, sh: 0, ab: 10, el: 30, hl: 0, kl: 10, hr: 0, kr: 10 },
+  ];
   function attack(sk, t) {
-    // Preparación, golpe y recuperación con el brazo derecho.
-    const wind = t < 0.35 ? t / 0.35 : Math.max(0, 1 - (t - 0.35) / 0.15);
-    const hit = t < 0.35 ? 0 : t < 0.6 ? (t - 0.35) / 0.25 : Math.max(0, 1 - (t - 0.6) / 0.4);
+    const k = sequence(ATTACK, t);
     const j = {
-      pelvis: { yaw: 18 * wind - 22 * hit }, spine: { yaw: 10 * wind - 12 * hit, flex: 6 * hit }, chest: { yaw: 10 * wind - 12 * hit },
-      head: { yaw: -12 * wind + 14 * hit },
-      hip_L: { flex: 22 * hit, abd: 6 }, knee_L: { flex: 20 + 10 * hit }, hip_R: { flex: -14 * hit, abd: 8 }, knee_R: { flex: 14 },
-      shoulder_R: { flex: -35 * wind + 95 * hit, abd: 35 * wind + 10 }, elbow_R: { flex: 95 * wind + 10 * (1 - hit) },
-      shoulder_L: { flex: 30 * wind - 10 * hit, abd: 10 }, elbow_L: { flex: 70 },
+      pelvis: { yaw: k.tw * 0.5 }, spine: { yaw: k.tw * 0.25, flex: 4 }, chest: { yaw: k.tw * 0.25 }, head: { yaw: -k.tw * 0.4 },
+      hip_L: { flex: k.hl, abd: 4 }, knee_L: { flex: k.kl }, hip_R: { flex: k.hr, abd: 6 }, knee_R: { flex: k.kr },
+      shoulder_R: { flex: k.sh, abd: k.ab - A0 }, elbow_R: { flex: k.el }, shoulder_L: { flex: 20, abd: 25 - A0 }, elbow_L: { flex: 80 },
     };
-    return { joints: j, hands: { L: 'puno', R: 'puno' }, face: { brow_frown: 0.8, mouth_open: 0.4 * hit, eye_open: 0.85 } };
+    return { joints: j, hands: { L: 'puno', R: 'puno' }, face: { brow_frown: 0.8, mouth_open: t > 0.3 && t < 0.6 ? 0.5 : 0, eye_open: 0.85 } };
   }
 
-  // Visemas (A, I, U, E, O, cerrado) para hablar.
-  const VISEMES = [{ mouth_open: 0.7 }, { mouth_open: 0.25, mouth_wide: 0.5 }, { mouth_open: 0.3, mouth_wide: -0.5 }, {}];
+  // Visemas (A, I, U, E, O, cerrado) para hablar, con asentimientos de 2–3°.
+  const VISEMES = [{ mouth_open: 0.7 }, { mouth_open: 0.25, mouth_wide: 0.5 }, { mouth_open: 0.3, mouth_wide: -0.5 }, { mouth_open: 0.45, mouth_wide: 0.2 }, {}];
 
-  // Pose de cada animación de la app en el instante t ∈ [0, 1).
   function animate(sk, animId, t) {
     switch (animId) {
       case 'walk': return walk(sk, t);
@@ -245,7 +316,12 @@ SC.anatRig = (() => {
       case 'jump': return jump(sk, t);
       case 'wave': return wave(sk, t);
       case 'attack': return attack(sk, t);
-      case 'talk': { const p = idle(sk, t); p.face = VISEMES[Math.floor(t * 4) % 4]; return p; }
+      case 'talk': {
+        const p = idle(sk, t);
+        p.joints.head.pitch += 2.5 * sin(t * TAU * 2);
+        p.face = Object.assign({ brow_up: t < 0.25 ? 0.3 : 0 }, VISEMES[Math.floor(t * 5) % 5]);
+        return p;
+      }
       case 'blink': { const p = idle(sk, t); p.face = { eye_open: Math.abs(t - 0.5) < 0.13 ? 0 : 1 }; return p; }
       default: return idle(sk, t);
     }

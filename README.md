@@ -17,7 +17,8 @@ Un mismo personaje se puede exportar de dos formas:
 | Motor | Para qué | Requisitos |
 | --- | --- | --- |
 | **Modelo VRM (anime 3D)** | Máxima calidad: anatomía y caras de nivel profesional, pelo con física, expresiones reales. Carga modelos `.vrm` (por ejemplo creados gratis con [VRoid Studio](https://vroid.com/en/studio)) y los pone en pose, gira, cambia de expresión y exporta con las mismas opciones. Incluye un modelo de ejemplo. | WebGL (cualquier gráfica integrada) |
-| **Anatómico (base matemática)** | Motor propio construido según [docs/base-matematica.md](docs/base-matematica.md): esqueleto canónico medido en cabezas, dimorfismo continuo (sexo morfológico, complexión, exageración), cara por líneas guía con expresiones por canales, busto y manos paramétricos, ciclo de andar y contrapposto con equilibrio, rampas de color OKLCH y validador. Es el motor por defecto. | Sólo Canvas 2D |
+| **Anatómico SDF (nuevo)** | Motor propio según [docs/correccion-visual.md](docs/correccion-visual.md): el mismo esqueleto medido de la base matemática, pero el cuerpo es **una sola superficie** (campo de distancias con unión suave) en lugar de polígonos pegados. Se renderiza un G-buffer (profundidad, normales, parte, material) y de ahí salen las líneas y el sombreado cel; cara anime proyectada sobre la cabeza, pelo por mechones, ropa por capas, falda que reacciona a las piernas, poses clave y pixel art reducido desde el buffer. Es el motor por defecto. | WebGL2 (con respaldo en CPU, más lento) |
+| **Anatómico clásico** | El primer motor de [docs/base-matematica.md](docs/base-matematica.md), por volúmenes 2D: se conserva para comparar. | Sólo Canvas 2D |
 | **Modular CC0 (piezas combinables)** | Personajes 3D montados con piezas intercambiables (cuerpo femenino o masculino, peinados, barba, torso, brazos, piernas, calzado, capucha y accesorios) y **84 animaciones** (caminar, correr, combos de espada, hechizos, disparar, bailar, sentarse, trabajos de granja…). Todo es **CC0** (dominio público, de [Quaternius](https://quaternius.com)): se puede vender sin dar crédito. | WebGL (cualquier gráfica integrada) |
 | **Generado (ligero)** | Personajes 100 % procedurales con ropa y accesorios intercambiables. | Sólo Canvas 2D |
 | **Hoja LPC (pixel art)** | Importa hojas del [Universal LPC Spritesheet Character Generator](https://github.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator), las reproduce con nuestras animaciones y vistas y las reexporta con créditos. | Sólo Canvas 2D |
@@ -27,7 +28,37 @@ El motor VRM usa [three.js](https://github.com/mrdoob/three.js) y
 `vendor/vrm-bundle.js` para que todo funcione sin conexión. La app muestra la licencia de cada
 modelo al cargarlo y añade un archivo de créditos a las exportaciones.
 
-### Motor anatómico
+### Motor anatómico SDF
+
+Implementa [docs/correccion-visual.md](docs/correccion-visual.md) siguiendo su orden de trabajo
+(12.3). Reutiliza el esqueleto, el canon y el rig del motor anatómico:
+
+| Capa | Archivo | Secciones |
+| --- | --- | --- |
+| Primitivas SDF | `js/sdf/core.js` | 2.1–2.3: cono redondeado elíptico, elipsoide, caja, plano; unión/resta/intersección suaves, unión localizada entre partes |
+| Cuerpo | `js/sdf/build.js` | 2.4, 4, 6, 7: cráneo, cara, mandíbula, nariz, labios, cuello, torso con caja torácica, pelvis y cintura escapular, brazos y manos con LOD, piernas y pies con volumen |
+| G-buffer CPU | `js/sdf/march.js` | 2.5, 9.3: cámara ortográfica, trazado de esferas, oclusión ambiental, sombra suave |
+| G-buffer GPU | `js/sdf/gl.js` | 2.5: el mismo campo en un shader WebGL2 (MRT de 3 texturas flotantes) |
+| Líneas y sombreado | `js/sdf/compose.js` | 3, 9: líneas de silueta, oclusión, material, mechón y pliegue; luz envolvente, 2 tonos + profundo, limpieza de islas, rampas OKLCH |
+| Cara | `js/sdf/face.js` | 4: rasgos anime anclados a la superficie con escorzo; sellos para cabezas pequeñas |
+| Pelo | `js/sdf/hair.js` | 5: casco base + mechones con gravedad que chocan con el cuerpo |
+| Ropa | `js/sdf/clothes.js` | 8: prendas como capas infladas del cuerpo con planos de corte; falda que se abomba con los muslos |
+| Motor | `js/sdf/engine.js` | 6.5, 11: encuadres, vistas, pixel art a 4× con reducción por mayoría y paleta ≤ 24 colores |
+
+El panel «Depuración del G-buffer» muestra normales, partes, materiales o profundidad en lugar
+del render final. Las pruebas de aceptación de la sección 12.1 están en `tests/sdf.test.mjs`
+(sin costuras en hombros, caderas y cuello; perfil con ≥ 5 inflexiones; cuello ≥ 0.3 H; manos
+0.65–0.80 H; pie con volumen; la falda no se atraviesa al andar ni al correr; sin manchas de
+sombra; reposo asimétrico; chibi con pierna ≥ 0.4 H y pie ≥ 4 px a 32 px).
+
+Diferencias con el documento: la luz se fija respecto al personaje (no a la cámara) para que
+la inclinación del pixel art no la mande detrás de la cabeza; el pelo sólo proyecta sombra a
+menos de 0.12 H (la banda bajo el flequillo, no media cara); los umbrales de línea nunca bajan
+de lo que sube una superficie inclinada en un píxel, para que los sprites pequeños no salgan
+rayados; y los labios en relieve sólo se modelan en el estilo realista (en anime la boca se
+dibuja).
+
+### Motor anatómico clásico
 
 Implementa el documento [docs/base-matematica.md](docs/base-matematica.md) por capas, cada una
 lee sólo de la anterior:
@@ -175,11 +206,14 @@ js/
   vrm/engine.js    motor VRM (three-vrm): carga, poses, expresiones, vistas y encuadres
   vrm/recolor.js   recoloreado de texturas conservando el dibujo (VRM y modular)
   mod/engine.js    motor modular CC0: montaje de piezas, zonas de piel, animaciones
-  anat/            motor anatómico (ver «Motor anatómico»)
+  anat/            esqueleto, canon y rig; motor anatómico clásico
+  sdf/             motor anatómico SDF (ver «Motor anatómico SDF»)
 docs/
-  base-matematica.md  especificación del sistema anatómico
+  base-matematica.md   especificación del sistema anatómico
+  correccion-visual.md corrección visual: cuerpo SDF, G-buffer, líneas, cara, pelo y ropa
 tests/
   anat.test.mjs    tests del núcleo anatómico (node --test)
+  sdf.test.mjs     pruebas de aceptación del motor SDF (sección 12.1)
 assets/
   cc0/             packs originales de Quaternius (CC0)
   mod/             paquetes optimizados que carga la app (generados con tools/build-cc0.mjs)

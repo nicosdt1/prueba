@@ -13,13 +13,20 @@ SC.CANON = {
     shojo: { name: 'Shōjo', N: 7.5, lambda: 0.55, face: 'anime' },
     pixel64: { name: 'Pixel 64', N: 5.0, lambda: 0.42, face: 'anime' },
     pixel32: { name: 'Pixel 32', N: 4.0, lambda: 0.38, face: 'chibi' },
-    chibi: { name: 'Chibi / SD', N: 2.5, lambda: 0.28, face: 'chibi' },
+    chibi: { name: 'Chibi / SD', N: 2.3, lambda: 0.26, face: 'chibi' },
   },
   minTorso: 0.8, // L_torso >= 0.8 H
   // Ampliación propia (no está en el documento): los anchos de 3.3 están medidos en
   // el canon adulto; en estilos de pocas cabezas el cuerpo se estrecha respecto a la
   // cabeza con (N / ref)^exp, así un chibi no tiene hombros de 1.7 cabezas.
   widthScale: { ref: 7, exp: 0.5 },
+  // Canon chibi propio (docs/correccion-visual.md, 11.1): no es un adulto encogido.
+  // Entre 2.5 y 5 cabezas se interpola entre este canon y el de 5 cabezas.
+  chibi: {
+    widths: { neck: 0.35, shoulders: 0.80, chest: 0.74, waist: 0.68, hip: 0.75, thigh: 0.38, knee: 0.28, calf: 0.3, ankle: 0.22, upperArm: 0.28, forearm: 0.26, wrist: 0.22 },
+    hand: 0.25, foot: 0.35, minLeg: 0.40,
+  },
+  handLength: [0.68, 0.80], // largo de mano adulto (6.3)
 
   // 3.2 Landmarks verticales: tau en el tronco (0 barbilla, 1 entrepierna), eta en la pierna.
   tau: {

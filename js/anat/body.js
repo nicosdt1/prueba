@@ -37,15 +37,19 @@ SC.anatBody = (() => {
     const tau = {}, eta = {};
     for (const [k, v] of Object.entries(C.tau)) tau[k] = M.dimorph(v, s, e);
     for (const [k, v] of Object.entries(C.eta)) eta[k] = M.dimorph(v, s, e);
-    const w = {}, ws = Math.pow(N / C.widthScale.ref, C.widthScale.exp);
-    for (const [k, v] of Object.entries(C.widths)) w[k] = M.width(v, s, e, b) * ws;
+    const w = {}, chib = M.clamp((5 - N) / 2.5, 0, 1);
+    const ws = Math.pow(Math.max(N, 5) / C.widthScale.ref, C.widthScale.exp);
+    for (const [k, v] of Object.entries(C.widths)) {
+      const adult = M.width(v, s, e, b) * ws;
+      w[k] = M.lerp(adult, C.chibi.widths[k] * (1 + v[2] * b * 0.5) * (1 + (M.dimorph(v, s, e) / M.dimorph(v, 0.5, 1) - 1) * 0.4), chib);
+    }
     const SHR = w.shoulders / w.hip, WHR = w.waist / w.hip;
 
     // 4.3 Longitudes de los huesos.
     const Larm = (tau.waist - tau.shoulder) * Ltorso;
     const Lfore = (1 - tau.waist) * Ltorso;
-    const Lhand = 0.25 * Ltorso;
-    const Lfoot = M.dimorph(C.footK, s, e) * Lleg;
+    const Lhand = M.lerp(M.clamp(0.25 * Ltorso, C.handLength[0], C.handLength[1]), C.chibi.hand, chib);
+    const Lfoot = M.lerp(M.dimorph(C.footK, s, e) * Lleg, C.chibi.foot, chib);
     const ck = M.dimorph(C.kneeConv, s, 1);
     const carry = M.rad(M.dimorph(C.carry, s, 1));
     const aPose = M.rad(C.aPose);
@@ -84,9 +88,9 @@ SC.anatBody = (() => {
       thigh: M.dist(J.hip_L.rest, J.knee_L.rest), shin: M.dist(J.knee_L.rest, J.ankle_L.rest),
     };
     return {
-      params: P, style: P.style, face: st.face, H, N, T, Lleg, Ltorso, yT, yL, tau, eta, w, widthScale: ws,
+      params: P, style: P.style, face: st.face, H, N, T, Lleg, Ltorso, yT, yL, tau, eta, w, widthScale: M.lerp(ws, 0.55, chib), chibi: chib,
       indices: { SHR, WHR }, joints: J, bones, carry, aPose,
-      valid: Ltorso >= C.minTorso * H - 1e-9,
+      valid: st.face === 'chibi' ? Lleg >= C.chibi.minLeg : Ltorso >= C.minTorso * H - 1e-9,
     };
   }
 

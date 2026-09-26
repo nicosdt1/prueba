@@ -54,10 +54,13 @@
     }
     const pick = (v, table, def) => (typeof v === 'string' && table[v] ? v : def);
     const al = a.look || {};
-    L.hairStyle = pick(al.hairStyle, SC.anatHead.HAIR, d.look.hairStyle);
-    L.topStyle = pick(al.topStyle, SC.anat.TOPS, d.look.topStyle);
-    L.bottomStyle = pick(al.bottomStyle, SC.anat.BOTTOMS, d.look.bottomStyle);
-    L.shoeStyle = pick(al.shoeStyle, SC.anat.SHOES, d.look.shoeStyle);
+    // Se aceptan las claves de los dos motores anatómicos (el clásico ignora las
+    // que no conoce, como la manga abullonada o la falda de capa).
+    const both = (a1, b1) => Object.assign({}, a1, b1);
+    L.hairStyle = pick(al.hairStyle, both(SC.anatHead.HAIR, SC.sdfHair.RECIPES), d.look.hairStyle);
+    L.topStyle = pick(al.topStyle, both(SC.anat.TOPS, SC.sdfClothes.TOPS), d.look.topStyle);
+    L.bottomStyle = pick(al.bottomStyle, both(SC.anat.BOTTOMS, SC.sdfClothes.BOTTOMS), d.look.bottomStyle);
+    L.shoeStyle = pick(al.shoeStyle, both(SC.anat.SHOES, SC.sdfClothes.SHOES), d.look.shoeStyle);
     return { params: P, look: L };
   }
 
@@ -66,7 +69,8 @@
     mode: 'vn',
     anim: 'idle',
     view: 'front',
-    engine: 'anat',
+    engine: 'sdf',
+    sdfDebug: 'none',
     modelRev: 0,
     dirs: true,
     playing: true,
@@ -199,7 +203,7 @@
 
   // Motor activo: generado, modelo VRM o hoja LPC.
   const E = () => (state.engine === 'vrm' && SC.vrm.loaded ? SC.vrm : state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc
-    : state.engine === 'mod' && SC.mod.loaded ? SC.mod : state.engine === 'anat' ? SC.anat : SC.render);
+    : state.engine === 'mod' && SC.mod.loaded ? SC.mod : state.engine === 'anat' ? SC.anat : state.engine === 'sdf' ? SC.sdfEngine : SC.render);
   const frameCountFor = (animId) => (state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc.frameCount(animId)
     : state.engine === 'mod' && SC.mod.loaded ? SC.mod.frameCount(animId) : SC.ANIMS[animId].frames);
   // Pose de un fotograma. Lleva la animación y el instante para los motores que
@@ -371,6 +375,10 @@
       return wrap;
     };
     const f2 = (v) => Number(v).toFixed(2);
+    // Tablas de peinados y ropa del motor activo (el SDF tiene alguna más).
+    const sdf = state.engine === 'sdf';
+    const HAIR = sdf ? SC.sdfHair.RECIPES : SC.anatHead.HAIR;
+    const CL = sdf ? SC.sdfClothes : SC.anat;
     const sexTxt = (v) => (v <= 0.2 ? 'masc.' : v >= 0.8 ? 'fem.' : 'andróg.');
 
     const gB = group('Cuerpo', 'body', true);
@@ -392,15 +400,15 @@
     gF.append(expressionChips());
 
     const gH = group('Pelo', 'hair', true);
-    gH.append(chipRow('Peinado', SC.anatHead.HAIR, L.hairStyle, (v) => { L.hairStyle = v; }));
+    gH.append(chipRow('Peinado', HAIR, L.hairStyle, (v) => { L.hairStyle = v; }));
     gH.append(color('Color', 'hair', PALETTES.hair));
 
     const gC = group('Ropa', 'clothes', false);
-    gC.append(chipRow('Parte superior', SC.anat.TOPS, L.topStyle, (v) => { L.topStyle = v; }));
+    gC.append(chipRow('Parte superior', CL.TOPS, L.topStyle, (v) => { L.topStyle = v; }));
     gC.append(color('Color', 'top', PALETTES.cloth));
-    gC.append(chipRow('Parte inferior', SC.anat.BOTTOMS, L.bottomStyle, (v) => { L.bottomStyle = v; }));
+    gC.append(chipRow('Parte inferior', CL.BOTTOMS, L.bottomStyle, (v) => { L.bottomStyle = v; }));
     gC.append(color('Color', 'bottom', PALETTES.cloth));
-    gC.append(chipRow('Calzado', SC.anat.SHOES, L.shoeStyle, (v) => { L.shoeStyle = v; }));
+    gC.append(chipRow('Calzado', CL.SHOES, L.shoeStyle, (v) => { L.shoeStyle = v; }));
     gC.append(color('Color', 'shoes', PALETTES.cloth));
 
     // Validación (12.6): se recalcula con cada cambio.
@@ -415,6 +423,19 @@
     }
     gV.append(list);
     gV.append(el('p', { class: 'hint', text: 'Proporciones, rasgos y poses salen de docs/base-matematica.md: nada se dibuja a mano, todo se mide contra el esqueleto canónico.' }));
+
+    // Depuración del G-buffer (docs/correccion-visual.md, paso 1): normales,
+    // partes, materiales o profundidad en lugar del sombreado final.
+    if (sdf) {
+      const gD = group('Depuración del G-buffer', 'debug', false);
+      const modes = { none: 'Render final', normal: 'Normales', part: 'Partes', material: 'Materiales', depth: 'Profundidad' };
+      const chips = el('div', { class: 'chips' });
+      for (const [id, name] of Object.entries(modes)) {
+        chips.append(el('button', { class: 'chip' + (state.sdfDebug === id ? ' active' : ''), text: name, onclick: (e) => { state.sdfDebug = id; chips.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === e.currentTarget)); draw(); } }));
+      }
+      gD.append(el('div', { class: 'slot' }, [el('div', { class: 'slot-title', text: 'Vista (novela visual)' }), chips]));
+      gD.append(el('p', { class: 'hint', text: SC.sdfGL.available() ? 'G-buffer calculado en la GPU (WebGL2).' : 'Sin WebGL2 con texturas flotantes: G-buffer en CPU (más lento).' }));
+    }
   }
 
   // ---------- Motor modular (piezas CC0 de Quaternius) ----------
@@ -496,7 +517,7 @@
     const root = $('editor');
     if (state.engine !== 'gen') {
       root.innerHTML = '';
-      if (state.engine === 'anat') buildAnatPanel(root); else if (state.engine === 'vrm') buildVrmPanel(root); else if (state.engine === 'mod') buildModPanel(root); else buildLpcPanel(root);
+      if (state.engine === 'anat' || state.engine === 'sdf') buildAnatPanel(root); else if (state.engine === 'vrm') buildVrmPanel(root); else if (state.engine === 'mod') buildModPanel(root); else buildLpcPanel(root);
       return;
     }
     const open = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.group));
@@ -629,16 +650,20 @@
 
   // La vista previa de novela visual se calcula como mucho a PREVIEW_MAX píxeles
   // de alto y se escala al lienzo: en pantallas de alta densidad ahorra 2-4 veces trabajo.
-  const PREVIEW_MAX = 900;
+  // El motor SDF traza rayos por píxel: su vista previa se limita más.
+  const PREVIEW_MAX = 900, PREVIEW_MAX_SDF = 560;
   function vnFrame(i, W, H) {
     const bust = $('vnFrame').value === 'bust';
-    const rs = Math.min(1, PREVIEW_MAX / H), Wr = Math.round(W * rs), Hr = Math.round(H * rs);
-    const key = JSON.stringify([state.ch, state.view, state.anim, Wr, Hr, bust, state.engine, state.modelRev]);
+    const rs = Math.min(1, (state.engine === 'sdf' ? PREVIEW_MAX_SDF : PREVIEW_MAX) / H), Wr = Math.round(W * rs), Hr = Math.round(H * rs);
+    const key = JSON.stringify([state.ch, state.view, state.anim, Wr, Hr, bust, state.engine, state.modelRev, state.sdfDebug]);
     if (state.vnCache.key !== key) state.vnCache = { key, frames: [] };
     let fr = state.vnCache.frames[i];
     if (!fr) {
       const pose = poseAt(state.anim, i);
-      if (state.engine === 'anat') {
+      if (state.engine === 'sdf') {
+        const o = { view: state.view, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth };
+        fr = state.sdfDebug !== 'none' ? SC.sdfEngine.debugView(state.ch, Wr, Hr, pose, Object.assign(o, { debug: state.sdfDebug })) : SC.sdfEngine.renderView(state.ch, Wr, Hr, pose, o);
+      } else if (state.engine === 'anat') {
         fr = SC.anat.renderView(state.ch, Wr, Hr, pose, { view: state.view, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth, lineMode: state.ch.style.lineMode });
       } else if (state.engine === 'mod') {
         fr = SC.mod.renderView(Wr, Hr, pose, { view: state.view, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
