@@ -17,6 +17,7 @@ Un mismo personaje se puede exportar de dos formas:
 | Motor | Para qué | Requisitos |
 | --- | --- | --- |
 | **Modelo VRM (anime 3D)** | Máxima calidad: anatomía y caras de nivel profesional, pelo con física, expresiones reales. Carga modelos `.vrm` (por ejemplo creados gratis con [VRoid Studio](https://vroid.com/en/studio)) y los pone en pose, gira, cambia de expresión y exporta con las mismas opciones. Incluye un modelo de ejemplo. | WebGL (cualquier gráfica integrada) |
+| **Anatómico (base matemática)** | Motor propio construido según [docs/base-matematica.md](docs/base-matematica.md): esqueleto canónico medido en cabezas, dimorfismo continuo (sexo morfológico, complexión, exageración), cara por líneas guía con expresiones por canales, busto y manos paramétricos, ciclo de andar y contrapposto con equilibrio, rampas de color OKLCH y validador. Es el motor por defecto. | Sólo Canvas 2D |
 | **Modular CC0 (piezas combinables)** | Personajes 3D montados con piezas intercambiables (cuerpo femenino o masculino, peinados, barba, torso, brazos, piernas, calzado, capucha y accesorios) y **84 animaciones** (caminar, correr, combos de espada, hechizos, disparar, bailar, sentarse, trabajos de granja…). Todo es **CC0** (dominio público, de [Quaternius](https://quaternius.com)): se puede vender sin dar crédito. | WebGL (cualquier gráfica integrada) |
 | **Generado (ligero)** | Personajes 100 % procedurales con ropa y accesorios intercambiables. | Sólo Canvas 2D |
 | **Hoja LPC (pixel art)** | Importa hojas del [Universal LPC Spritesheet Character Generator](https://github.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator), las reproduce con nuestras animaciones y vistas y las reexporta con créditos. | Sólo Canvas 2D |
@@ -25,6 +26,39 @@ El motor VRM usa [three.js](https://github.com/mrdoob/three.js) y
 [three-vrm](https://github.com/pixiv/three-vrm) (licencia MIT), empaquetados en
 `vendor/vrm-bundle.js` para que todo funcione sin conexión. La app muestra la licencia de cada
 modelo al cargarlo y añade un archivo de créditos a las exportaciones.
+
+### Motor anatómico
+
+Implementa el documento [docs/base-matematica.md](docs/base-matematica.md) por capas, cada una
+lee sólo de la anterior:
+
+| Capa | Archivo | Secciones |
+| --- | --- | --- |
+| Tablas del canon | `js/anat/canon.js` | 3–8, 10, 11 (todas las constantes; se ajustan sin tocar código) |
+| Matemática | `js/anat/math.js` | Catmull-Rom centrípeta, Hermite monótono, rotaciones Y→X→Z, OKLCH |
+| Esqueleto | `js/anat/body.js` | 3–4: parámetros → landmarks → articulaciones, SHR y WHR |
+| Rig | `js/anat/rig.js` | 4.4 límites, 8.4 centro de masas y contrapposto, 10 FK, IK, ciclo de andar |
+| Formas | `js/anat/shapes.js` | 6 torso y busto, 7 brazos y manos (15 articulaciones), 8 piernas y pies |
+| Cabeza | `js/anat/head.js` | 5: contorno, perfil, rasgos, expresiones y pelo paramétrico |
+| Render | `js/anat/render.js` | 6.5 encuadres, 9.6 orden de dibujo, 11 proyección y rampas |
+| Piezas | `js/anat/parts.js` | 9: colocación con 2 anclajes, Procrustes, lectura por momentos |
+| Validador | `js/anat/validate.js` | 12.6 (se muestra en el panel «Validación anatómica») |
+
+Diferencias con el documento: el núcleo está en JavaScript (no TypeScript) y el canon en
+`canon.js` (no `canon.json`) para que la app siga funcionando con doble clic sin compilar. Se
+añadió una escala de anchos por estilo (`widthScale`) porque los anchos de 3.3 están medidos en
+el canon adulto y un chibi necesita un cuerpo más estrecho respecto a la cabeza.
+
+Tests (13.2), con Node 18 o superior:
+
+```bash
+node --test
+```
+
+Comprueban, entre otros: Catmull-Rom pasa por sus puntos, Hermite no se sale de los valores,
+SHR 1.40 (hombre) y 0.97 (mujer), huesos del canon de 8 cabezas, codo a la altura de la
+cintura, simetría exacta, IK con error < 1e-4, longitud de los huesos constante en todas las
+animaciones, contrapposto en equilibrio, rampas OKLCH legibles y Procrustes con ε ≈ 0.
 
 ### Motor modular CC0
 
@@ -141,6 +175,11 @@ js/
   vrm/engine.js    motor VRM (three-vrm): carga, poses, expresiones, vistas y encuadres
   vrm/recolor.js   recoloreado de texturas conservando el dibujo (VRM y modular)
   mod/engine.js    motor modular CC0: montaje de piezas, zonas de piel, animaciones
+  anat/            motor anatómico (ver «Motor anatómico»)
+docs/
+  base-matematica.md  especificación del sistema anatómico
+tests/
+  anat.test.mjs    tests del núcleo anatómico (node --test)
 assets/
   cc0/             packs originales de Quaternius (CC0)
   mod/             paquetes optimizados que carga la app (generados con tools/build-cc0.mjs)

@@ -38,14 +38,35 @@
       shoes: { part: 'zapatos', colors: {} },
       headAcc: { part: 'lazo', colors: {} },
     },
+    anat: defaultAnat(),
   });
+  // Personaje del motor anatómico: parámetros del canon (s, b, e, estilo...) y aspecto.
+  function defaultAnat() {
+    return { params: JSON.parse(JSON.stringify(SC.anatBody.DEFAULTS)), look: Object.assign({}, SC.anat.DEFAULT_LOOK) };
+  }
+  function sanitizeAnat(a) {
+    const d = defaultAnat();
+    if (!a || typeof a !== 'object') return d;
+    const P = SC.anatBody.params(a.params || {});
+    const L = Object.assign({}, d.look);
+    for (const [k, v] of Object.entries(a.look || {})) {
+      if (/^#[0-9a-f]{6}$/i.test(v) && k in L) L[k] = v;
+    }
+    const pick = (v, table, def) => (typeof v === 'string' && table[v] ? v : def);
+    const al = a.look || {};
+    L.hairStyle = pick(al.hairStyle, SC.anatHead.HAIR, d.look.hairStyle);
+    L.topStyle = pick(al.topStyle, SC.anat.TOPS, d.look.topStyle);
+    L.bottomStyle = pick(al.bottomStyle, SC.anat.BOTTOMS, d.look.bottomStyle);
+    L.shoeStyle = pick(al.shoeStyle, SC.anat.SHOES, d.look.shoeStyle);
+    return { params: P, look: L };
+  }
 
   const state = {
     ch: loadStored() || defaultCharacter(),
     mode: 'vn',
     anim: 'idle',
     view: 'front',
-    engine: 'gen',
+    engine: 'anat',
     modelRev: 0,
     dirs: true,
     playing: true,
@@ -86,6 +107,7 @@
     }
     if (ch.body && SEXES[ch.body.sex]) out.body.sex = ch.body.sex;
     if (ch.mod && typeof ch.mod === 'object') out.mod = sanitizeMod(ch.mod);
+    out.anat = sanitizeAnat(ch.anat);
     for (const slot of SC.SLOTS) {
       const sel = ch.slots[slot.id];
       if (sel && SC.getPart(slot.id, sel.part)) {
@@ -177,7 +199,7 @@
 
   // Motor activo: generado, modelo VRM o hoja LPC.
   const E = () => (state.engine === 'vrm' && SC.vrm.loaded ? SC.vrm : state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc
-    : state.engine === 'mod' && SC.mod.loaded ? SC.mod : SC.render);
+    : state.engine === 'mod' && SC.mod.loaded ? SC.mod : state.engine === 'anat' ? SC.anat : SC.render);
   const frameCountFor = (animId) => (state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc.frameCount(animId)
     : state.engine === 'mod' && SC.mod.loaded ? SC.mod.frameCount(animId) : SC.ANIMS[animId].frames);
   // Pose de un fotograma. Lleva la animación y el instante para los motores que
@@ -308,6 +330,93 @@
     root.append(g);
   }
 
+  // ---------- Motor anatómico (docs/base-matematica.md) ----------
+  function buildAnatPanel(root) {
+    const a = state.ch.anat = state.ch.anat || defaultAnat();
+    const P = a.params, L = a.look;
+    const open = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.group));
+    const first = !root.children.length;
+    root.innerHTML = '';
+    const group = (name, id, isOpen) => {
+      const g = el('details', { class: 'group', 'data-group': id }, [el('summary', { text: name })]);
+      if (first ? isOpen : open.has(id)) g.open = true;
+      root.append(g);
+      return g;
+    };
+    const chipRow = (title, table, current, onPick) => {
+      const chips = el('div', { class: 'chips' });
+      for (const [id, v] of Object.entries(table)) {
+        chips.append(el('button', { class: 'chip' + (current === id ? ' active' : ''), text: v.name || v, onclick: () => { onPick(id); changed(true); } }));
+      }
+      return el('div', { class: 'slot' }, [el('div', { class: 'slot-title', text: title }), chips]);
+    };
+    const slider = (label, obj, key, min, max, step, fmt) => {
+      const out = el('output', { text: fmt(obj[key]) });
+      const input = el('input', { type: 'range', min, max, step, value: obj[key], 'aria-label': label });
+      input.addEventListener('input', () => { obj[key] = Number(input.value); out.textContent = fmt(obj[key]); changed(); });
+      input.addEventListener('change', () => changed(true));
+      return el('label', { class: 'slider' }, [label, input, out]);
+    };
+    const color = (label, key, pal) => {
+      const wrap = el('div', { class: 'colors' });
+      const input = el('input', { type: 'color', value: L[key], 'aria-label': label });
+      input.addEventListener('input', () => { L[key] = input.value; changed(); });
+      input.addEventListener('change', () => changed(true));
+      wrap.append(el('label', { class: 'color' }, [input, label]));
+      if (pal) {
+        const sw = el('div', { class: 'swatches' });
+        for (const col of pal) sw.append(el('button', { class: 'swatch', style: `background:${col}`, title: col, 'aria-label': `${label} ${col}`, onclick: () => { L[key] = col; changed(true); } }));
+        wrap.append(sw);
+      }
+      return wrap;
+    };
+    const f2 = (v) => Number(v).toFixed(2);
+    const sexTxt = (v) => (v <= 0.2 ? 'masc.' : v >= 0.8 ? 'fem.' : 'andróg.');
+
+    const gB = group('Cuerpo', 'body', true);
+    gB.append(chipRow('Estilo (cabezas de alto)', Object.fromEntries(Object.entries(SC.CANON.styles).map(([k, v]) => [k, { name: `${v.name} · ${v.N}` }])), P.style, (v) => { P.style = v; }));
+    gB.append(slider('Sexo morfológico', P, 's', 0, 1, 0.01, sexTxt));
+    gB.append(slider('Complexión', P, 'b', -1, 1, 0.01, f2));
+    gB.append(slider('Dimorfismo', P, 'e', 0.5, 1.5, 0.01, f2));
+    if (P.s >= 0.35) {
+      gB.append(slider('Busto: tamaño', P.bust, 'c', 0, 1, 0.01, f2));
+      gB.append(slider('Busto: caída', P.bust, 'g', 0, 1, 0.01, f2));
+      gB.append(slider('Busto: separación', P.bust, 'q', 0, 1, 0.01, f2));
+    }
+    gB.append(color('Piel', 'skin', PALETTES.skin));
+
+    const gF = group('Cara', 'face', true);
+    gF.append(slider('Tamaño de ojos', P.face, 'eyeScale', 0.8, 1.3, 0.01, f2));
+    gF.append(slider('Mandíbula', P.face, 'jaw', -1, 1, 0.01, f2));
+    gF.append(color('Ojos', 'eyes', PALETTES.eyes));
+    gF.append(expressionChips());
+
+    const gH = group('Pelo', 'hair', true);
+    gH.append(chipRow('Peinado', SC.anatHead.HAIR, L.hairStyle, (v) => { L.hairStyle = v; }));
+    gH.append(color('Color', 'hair', PALETTES.hair));
+
+    const gC = group('Ropa', 'clothes', false);
+    gC.append(chipRow('Parte superior', SC.anat.TOPS, L.topStyle, (v) => { L.topStyle = v; }));
+    gC.append(color('Color', 'top', PALETTES.cloth));
+    gC.append(chipRow('Parte inferior', SC.anat.BOTTOMS, L.bottomStyle, (v) => { L.bottomStyle = v; }));
+    gC.append(color('Color', 'bottom', PALETTES.cloth));
+    gC.append(chipRow('Calzado', SC.anat.SHOES, L.shoeStyle, (v) => { L.shoeStyle = v; }));
+    gC.append(color('Color', 'shoes', PALETTES.cloth));
+
+    // Validación (12.6): se recalcula con cada cambio.
+    const gV = group('Validación anatómica', 'validate', false);
+    const px = state.mode === 'pixel' ? Number(($('pxSize').value || '48x64').split('x')[1]) : null;
+    const icon = { ok: '✓', warn: '⚠', error: '✗' };
+    const list = el('div', { class: 'info-box' });
+    for (const r of SC.anatValidate.run(a, { pixelHeight: px })) {
+      const line = el('div', { class: 'check-' + r.level });
+      line.append(el('b', { text: `${icon[r.level]} ${r.name}: ` }), r.msg);
+      list.append(line);
+    }
+    gV.append(list);
+    gV.append(el('p', { class: 'hint', text: 'Proporciones, rasgos y poses salen de docs/base-matematica.md: nada se dibuja a mano, todo se mide contra el esqueleto canónico.' }));
+  }
+
   // ---------- Motor modular (piezas CC0 de Quaternius) ----------
   let modBusy = null;
   async function rebuildMod() {
@@ -387,7 +496,7 @@
     const root = $('editor');
     if (state.engine !== 'gen') {
       root.innerHTML = '';
-      if (state.engine === 'vrm') buildVrmPanel(root); else if (state.engine === 'mod') buildModPanel(root); else buildLpcPanel(root);
+      if (state.engine === 'anat') buildAnatPanel(root); else if (state.engine === 'vrm') buildVrmPanel(root); else if (state.engine === 'mod') buildModPanel(root); else buildLpcPanel(root);
       return;
     }
     const open = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.group));
@@ -529,7 +638,9 @@
     let fr = state.vnCache.frames[i];
     if (!fr) {
       const pose = poseAt(state.anim, i);
-      if (state.engine === 'mod') {
+      if (state.engine === 'anat') {
+        fr = SC.anat.renderView(state.ch, Wr, Hr, pose, { view: state.view, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth, lineMode: state.ch.style.lineMode });
+      } else if (state.engine === 'mod') {
         fr = SC.mod.renderView(Wr, Hr, pose, { view: state.view, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
       } else if (state.engine === 'vrm') {
         fr = SC.vrm.renderView(Wr, Hr, pose, { view: state.view, expression: state.ch.expression, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
@@ -642,6 +753,21 @@
     const pick = (arr) => arr[Math.floor(r() * arr.length)];
     const ch = defaultCharacter();
     ch.name = state.ch.name;
+    {
+      const styles = ['anime', 'anime', 'shojo', 'realista', 'heroico', 'chibi'];
+      const s = r() < 0.5 ? 0.9 + r() * 0.1 : r() * 0.12;
+      ch.anat = {
+        params: { style: pick(styles), s, b: +(r() * 1.2 - 0.5).toFixed(2), e: +(1 + r() * 0.3).toFixed(2), bust: { c: +(0.2 + r() * 0.6).toFixed(2), g: +(r() * 0.4).toFixed(2), q: +(r()).toFixed(2) }, face: { eyeScale: +(0.9 + r() * 0.3).toFixed(2), jaw: +(r() * 0.8 - 0.4).toFixed(2) } },
+        look: {
+          skin: pick(PALETTES.skin.slice(0, 7)), hair: pick(PALETTES.hair), eyes: pick(PALETTES.eyes), top: pick(PALETTES.cloth), bottom: pick(PALETTES.cloth), shoes: pick(['#5a3d2b', '#2b2233', '#f2f2f5', '#8e5bc8']), tie: pick(PALETTES.cloth),
+          hairStyle: pick(s > 0.5 ? ['bob', 'largo', 'coleta', 'coletas', 'mono'] : ['corto', 'corto', 'rapado', 'bob']),
+          topStyle: pick(s > 0.5 ? ['camiseta', 'larga', 'tirantes', 'vestido'] : ['camiseta', 'larga']),
+          bottomStyle: pick(s > 0.5 ? ['falda', 'larga', 'pantalon', 'corto'] : ['pantalon', 'corto']),
+          shoeStyle: pick(['zapatos', 'botas']),
+        },
+      };
+      ch.anat = sanitizeAnat(ch.anat);
+    }
     ch.style = state.ch.style;
     ch.expression = pick(Object.keys(SC.EXPRESSIONS));
     const sex = r() < 0.5 ? 'f' : 'm';

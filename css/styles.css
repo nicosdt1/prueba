@@ -185,3 +185,6 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
   .stage { min-height: 60vh; }
   .panel { overflow: visible; }
 }
+.check-ok b { color: #2f8f5b; }
+.check-warn b { color: #b7791f; }
+.check-error b { color: #c0392b; }
