@@ -223,9 +223,39 @@
     }
     g.append(el('p', { class: 'hint', text: 'Crea tus personajes gratis con VRoid Studio (exporta en .vrm) y cárgalos aquí. Poses, vistas, expresiones y exportaciones funcionan igual que con el motor generado. Respeta la licencia de cada modelo.' }));
     root.append(g);
+    if (SC.vrm.loaded) root.append(vrmCustomizer());
     const c = el('details', { class: 'group', open: '' }, [el('summary', { text: 'Cara' })]);
     c.append(expressionChips());
     root.append(c);
+  }
+
+  // Personalización del modelo: recolorea sus propias texturas (pelo, ojos,
+  // piel, cada prenda) conservando el dibujo, y permite ocultar prendas.
+  function vrmCustomizer() {
+    const g = el('details', { class: 'group', open: '' }, [el('summary', { text: 'Personalizar' })]);
+    if (!SC.vrm.info.canModify) {
+      g.append(el('p', { class: 'hint', text: 'La licencia de este modelo no permite modificarlo, así que no se puede recolorear.' }));
+      return g;
+    }
+    const refresh = () => { state.modelRev++; draw(); };
+    for (const grp of SC.vrm.groups) {
+      const input = el('input', { type: 'color', value: grp.color || grp.base, 'aria-label': grp.label });
+      input.addEventListener('change', () => { status('Aplicando color…'); setTimeout(() => { SC.vrm.setGroupColor(grp.id, input.value); status(''); refresh(); }, 10); });
+      const reset = el('button', {
+        class: 'chip', text: '↺', title: 'Color original', 'aria-label': 'Restablecer ' + grp.label,
+        onclick: () => { SC.vrm.setGroupColor(grp.id, null); input.value = grp.base; refresh(); },
+      });
+      const row = el('div', { class: 'colors' }, [el('label', { class: 'color' }, [input, grp.label]), reset]);
+      if (grp.cloth) {
+        const cb = el('input', { type: 'checkbox' });
+        cb.checked = grp.visible;
+        cb.addEventListener('change', () => { SC.vrm.setGroupVisible(grp.id, cb.checked); refresh(); });
+        row.append(el('label', { class: 'check' }, [cb, 'Visible']));
+      }
+      g.append(row);
+    }
+    g.append(el('p', { class: 'hint', text: 'El color se aplica sobre las texturas originales del modelo: se conservan mechones, brillos, pliegues y sombras.' }));
+    return g;
   }
 
   function buildLpcPanel(root) {
@@ -375,13 +405,59 @@
   // Direcciones típicas de un juego 2D (vista cenital o lateral).
   const DIRS = [{ view: 'front', dir: 'abajo' }, { view: 'left', dir: 'izquierda' }, { view: 'side', dir: 'derecha' }, { view: 'back', dir: 'arriba' }];
 
-  function pixelFrames() {
+  // Fotogramas bajo demanda: sólo se calcula el que se va a mostrar y el resto
+  // se precalcula en segundo plano (ver prefetch), así la interfaz no se congela.
+  function pixelFrame(i) {
     const o = pxOptions();
     const key = JSON.stringify([state.ch, o, state.anim, state.view, state.engine, state.modelRev]);
-    if (state.pxCache.key !== key) {
-      state.pxCache = { key, frames: E().renderAnimation(state.ch, state.anim, 'pixel', o) };
+    if (state.pxCache.key !== key) state.pxCache = { key, frames: [] };
+    if (!state.pxCache.frames[i]) {
+      const a = SC.ANIMS[state.anim], pose = a.pose(i, a.frames), Eng = E();
+      state.pxCache.frames[i] = o.portrait ? Eng.renderPixelPortrait(state.ch, pose, o) : Eng.renderPixel(state.ch, pose, o);
     }
-    return state.pxCache.frames;
+    return state.pxCache.frames[i];
+  }
+
+  // La vista previa de novela visual se calcula como mucho a PREVIEW_MAX píxeles
+  // de alto y se escala al lienzo: en pantallas de alta densidad ahorra 2-4 veces trabajo.
+  const PREVIEW_MAX = 900;
+  function vnFrame(i, W, H) {
+    const bust = $('vnFrame').value === 'bust';
+    const rs = Math.min(1, PREVIEW_MAX / H), Wr = Math.round(W * rs), Hr = Math.round(H * rs);
+    const key = JSON.stringify([state.ch, state.view, state.anim, Wr, Hr, bust, state.engine, state.modelRev]);
+    if (state.vnCache.key !== key) state.vnCache = { key, frames: [] };
+    let fr = state.vnCache.frames[i];
+    if (!fr) {
+      const a = SC.ANIMS[state.anim], pose = a.pose(i, a.frames);
+      if (state.engine === 'vrm') {
+        fr = SC.vrm.renderView(Wr, Hr, pose, { view: state.view, expression: state.ch.expression, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
+      } else {
+        const box = bust ? SC.render.bustBox(state.ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
+        const k = Math.min(Wr / box.w, Hr / box.h) * 0.94;
+        fr = SC.render.makeCanvas(Wr, Hr);
+        SC.render.paintVN(fr.getContext('2d'), Wr, Hr, [k, 0, 0, k, (Wr - box.w * k) / 2 - box.x * k, (Hr - box.h * k) / 2 - box.y * k], state.ch, pose, { view: state.view });
+      }
+      state.vnCache.frames[i] = fr;
+    }
+    return fr;
+  }
+
+  // Precalcula en segundo plano los fotogramas que faltan de la animación actual.
+  let prefetchTimer = 0;
+  function schedulePrefetch() {
+    if (prefetchTimer || needsModel() || state.engine === 'lpc') return;
+    prefetchTimer = setTimeout(() => {
+      prefetchTimer = 0;
+      const n = frameCountFor(state.anim);
+      for (let i = 0; i < n; i++) {
+        if (state.mode === 'vn') {
+          const cache = state.vnCache.frames;
+          if (!cache[i]) { vnFrame(i, view.width, view.height); break; }
+        } else if (!state.pxCache.frames[i]) { pixelFrame(i); break; }
+        if (i === n - 1) return;
+      }
+      schedulePrefetch();
+    }, 40);
   }
 
   function currentPose() {
@@ -416,32 +492,18 @@
       vctx.drawImage(f, Math.round((W - f.width * zoom) / 2), Math.round((H - f.height * zoom) / 2), f.width * zoom, f.height * zoom);
       return;
     }
+    const fi = state.frame % nFrames;
     if (state.mode === 'vn') {
-      const bust = $('vnFrame').value === 'bust';
-      // Caché de fotogramas: tras la primera vuelta la animación no se recalcula.
-      const key = JSON.stringify([state.ch, state.view, state.anim, W, H, bust, state.engine, state.modelRev]);
-      if (state.vnCache.key !== key) state.vnCache = { key, frames: [] };
-      const fi = state.frame % nFrames;
-      let fr = state.vnCache.frames[fi];
-      if (!fr) {
-        if (state.engine === 'vrm') {
-          fr = SC.vrm.renderView(W, H, currentPose(), { view: state.view, expression: state.ch.expression, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
-        } else {
-          const box = bust ? SC.render.bustBox(state.ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
-          const k = Math.min(W / box.w, H / box.h) * 0.94;
-          fr = SC.render.makeCanvas(W, H);
-          SC.render.paintVN(fr.getContext('2d'), W, H, [k, 0, 0, k, (W - box.w * k) / 2 - box.x * k, (H - box.h * k) / 2 - box.y * k], state.ch, currentPose(), { view: state.view });
-        }
-        state.vnCache.frames[fi] = fr;
-      }
-      vctx.drawImage(fr, 0, 0);
+      vctx.imageSmoothingEnabled = true;
+      vctx.imageSmoothingQuality = 'high';
+      vctx.drawImage(vnFrame(fi, W, H), 0, 0, W, H);
     } else {
-      const frames = pixelFrames();
-      const f = frames[state.frame % frames.length];
+      const f = pixelFrame(fi);
       const zoom = Math.max(1, Math.floor(Math.min(W / f.width, H / f.height) * 0.85));
       vctx.imageSmoothingEnabled = false;
       vctx.drawImage(f, Math.round((W - f.width * zoom) / 2), Math.round((H - f.height * zoom) / 2), f.width * zoom, f.height * zoom);
     }
+    schedulePrefetch();
   }
 
   let last = 0;

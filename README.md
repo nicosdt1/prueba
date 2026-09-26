@@ -25,6 +25,21 @@ El motor VRM usa [three.js](https://github.com/mrdoob/three.js) y
 `vendor/vrm-bundle.js` para que todo funcione sin conexión. La app muestra la licencia de cada
 modelo al cargarlo y añade un archivo de créditos a las exportaciones.
 
+### Personalizar un modelo VRM
+
+En el panel **Personalizar** se cambia el color del pelo, los ojos, las cejas y pestañas, la
+piel y cada prenda, y se puede ocultar cada prenda. El color se aplica sobre las texturas
+originales del modelo: el color principal pasa a ser el elegido y el resto de tonos se reparten
+a su alrededor, así se conservan los mechones, brillos, pliegues, sombras y líneas pintados, y
+los detalles de otro color (lazos, botones) no cambian. ↺ devuelve el color original. Si la
+licencia del modelo no permite modificarlo, el panel no deja recolorear.
+
+### Rendimiento
+
+La vista previa se dibuja a un máximo de 900 px de alto y sólo se calcula el fotograma que se
+ve; los demás se preparan en segundo plano. Las exportaciones siempre usan la resolución
+completa.
+
 > Las condiciones de VRoid Studio permiten usar los modelos que exportes (también
 > comercialmente), pero no crear aplicaciones que generen modelos combinando piezas hechas con
 > VRoid. Por eso la app no mezcla piezas: renderiza el modelo que tú cargas.
