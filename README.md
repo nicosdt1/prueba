@@ -17,6 +17,7 @@ Un mismo personaje se puede exportar de dos formas:
 | Motor | Para qué | Requisitos |
 | --- | --- | --- |
 | **Modelo VRM (anime 3D)** | Máxima calidad: anatomía y caras de nivel profesional, pelo con física, expresiones reales. Carga modelos `.vrm` (por ejemplo creados gratis con [VRoid Studio](https://vroid.com/en/studio)) y los pone en pose, gira, cambia de expresión y exporta con las mismas opciones. Incluye un modelo de ejemplo. | WebGL (cualquier gráfica integrada) |
+| **Modular CC0 (piezas combinables)** | Personajes 3D montados con piezas intercambiables (cuerpo femenino o masculino, peinados, barba, torso, brazos, piernas, calzado, capucha y accesorios) y **84 animaciones** (caminar, correr, combos de espada, hechizos, disparar, bailar, sentarse, trabajos de granja…). Todo es **CC0** (dominio público, de [Quaternius](https://quaternius.com)): se puede vender sin dar crédito. | WebGL (cualquier gráfica integrada) |
 | **Generado (ligero)** | Personajes 100 % procedurales con ropa y accesorios intercambiables. | Sólo Canvas 2D |
 | **Hoja LPC (pixel art)** | Importa hojas del [Universal LPC Spritesheet Character Generator](https://github.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator), las reproduce con nuestras animaciones y vistas y las reexporta con créditos. | Sólo Canvas 2D |
 
@@ -24,6 +25,24 @@ El motor VRM usa [three.js](https://github.com/mrdoob/three.js) y
 [three-vrm](https://github.com/pixiv/three-vrm) (licencia MIT), empaquetados en
 `vendor/vrm-bundle.js` para que todo funcione sin conexión. La app muestra la licencia de cada
 modelo al cargarlo y añade un archivo de créditos a las exportaciones.
+
+### Motor modular CC0
+
+Las piezas comparten el mismo esqueleto, así que se "cosen" al cuerpo por nombre de hueso y se
+animan juntas. La piel que queda bajo la ropa se oculta por zonas (torso, brazos, piernas, pies)
+para que no la atraviese. Cada pieza se puede recolorear conservando su textura pintada.
+
+Los paquetes de `assets/mod/` se generan a partir de los packs originales de `assets/cc0/`:
+
+```bash
+cd tools
+npm install
+npm run build-cc0
+```
+
+El script une las piezas, quita los mapas que el render toon no usa, reduce las texturas y
+comprime las animaciones (de ~570 MB de origen a ~11 MB). Para añadir más packs de Quaternius
+(u otros CC0 con el mismo esqueleto), cópialos en `assets/cc0/` y añádelos a `tools/build-cc0.mjs`.
 
 ### Personalizar un modelo VRM
 
@@ -120,6 +139,13 @@ Grid by Cell Size), GameMaker, RPG Maker, Phaser, etc.
 ```
 js/
   vrm/engine.js    motor VRM (three-vrm): carga, poses, expresiones, vistas y encuadres
+  vrm/recolor.js   recoloreado de texturas conservando el dibujo (VRM y modular)
+  mod/engine.js    motor modular CC0: montaje de piezas, zonas de piel, animaciones
+assets/
+  cc0/             packs originales de Quaternius (CC0)
+  mod/             paquetes optimizados que carga la app (generados con tools/build-cc0.mjs)
+tools/
+  build-cc0.mjs    convierte los packs CC0 en paquetes ligeros
   lpc/lpc.js       importador de hojas LPC
   core/
     util.js        colores, vectores 3D, matrices de rotación y primitivas 2D

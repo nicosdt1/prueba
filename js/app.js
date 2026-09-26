@@ -85,6 +85,7 @@
       if (Number.isFinite(v)) out.body[s.key] = U.clamp(v, s.min, s.max);
     }
     if (ch.body && SEXES[ch.body.sex]) out.body.sex = ch.body.sex;
+    if (ch.mod && typeof ch.mod === 'object') out.mod = sanitizeMod(ch.mod);
     for (const slot of SC.SLOTS) {
       const sel = ch.slots[slot.id];
       if (sel && SC.getPart(slot.id, sel.part)) {
@@ -96,6 +97,18 @@
       }
     }
     return out;
+  }
+
+  // Configuración del motor modular (piezas CC0).
+  function sanitizeMod(m) {
+    const d = SC.mod.config, parts = {};
+    for (const sl of SC.mod.SLOTS) {
+      const v = m.parts && m.parts[sl.id];
+      parts[sl.id] = v && SC.mod.SETS[v] ? v : v === null ? null : d.parts[sl.id];
+    }
+    const colors = {};
+    for (const [k, v] of Object.entries(m.colors || {})) if (/^#[0-9a-f]{6}$/i.test(v) && /^[\w:]+$/.test(k)) colors[k] = v;
+    return { sex: m.sex === 'm' ? 'm' : 'f', hair: SC.mod.HAIRS[m.hair] ? m.hair : m.hair === null ? null : d.hair, beard: !!m.beard, parts, colors };
   }
 
   // ---------- Editor ----------
@@ -163,8 +176,18 @@
   }
 
   // Motor activo: generado, modelo VRM o hoja LPC.
-  const E = () => (state.engine === 'vrm' && SC.vrm.loaded ? SC.vrm : state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc : SC.render);
-  const frameCountFor = (animId) => (state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc.frameCount(animId) : SC.ANIMS[animId].frames);
+  const E = () => (state.engine === 'vrm' && SC.vrm.loaded ? SC.vrm : state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc
+    : state.engine === 'mod' && SC.mod.loaded ? SC.mod : SC.render);
+  const frameCountFor = (animId) => (state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc.frameCount(animId)
+    : state.engine === 'mod' && SC.mod.loaded ? SC.mod.frameCount(animId) : SC.ANIMS[animId].frames);
+  // Pose de un fotograma. Lleva la animación y el instante para los motores que
+  // reproducen clips (modular) en vez de poses generadas.
+  function poseAt(animId, i) {
+    const a = SC.ANIMS[animId], n = frameCountFor(animId);
+    return Object.assign(a.pose(i % a.frames, a.frames), { animId, t: (i % n) / n });
+  }
+  // Animaciones que ofrece el motor activo (las extra sólo existen en el modular).
+  const animList = () => Object.values(SC.ANIMS).filter((a) => !a.modOnly || state.engine === 'mod');
 
   function infoBox(rows) {
     const box = el('div', { class: 'info-box' });
@@ -285,11 +308,86 @@
     root.append(g);
   }
 
+  // ---------- Motor modular (piezas CC0 de Quaternius) ----------
+  let modBusy = null;
+  async function rebuildMod() {
+    const cfg = state.ch.mod || SC.mod.config;
+    const job = (modBusy = SC.mod.build(cfg));
+    try {
+      await job;
+      if (job !== modBusy) return;
+      state.ch.mod = SC.mod.config;
+      state.modelRev++;
+      status('');
+    } catch (err) {
+      status('No se pudo montar el personaje: ' + err.message);
+    }
+    modBusy = null;
+    changed(true);
+  }
+
+  function modSet(fn) {
+    state.ch.mod = state.ch.mod || SC.mod.config;
+    fn(state.ch.mod);
+    status('Montando personaje…');
+    rebuildMod();
+    buildEditor();
+  }
+
+  function buildModPanel(root) {
+    const g = el('details', { class: 'group', open: '' }, [el('summary', { text: 'Personaje modular' })]);
+    root.append(g);
+    if (!SC.mod.available) {
+      g.append(el('p', { class: 'hint', text: 'Este navegador no tiene WebGL, necesario para el motor modular. Usa el motor «Generado».' }));
+      return;
+    }
+    const cfg = state.ch.mod || SC.mod.config;
+    const chipRow = (title, options, current, onPick) => {
+      const chips = el('div', { class: 'chips' });
+      for (const [id, name] of options) {
+        chips.append(el('button', { class: 'chip' + (current === id ? ' active' : ''), text: name, onclick: () => onPick(id) }));
+      }
+      return el('div', { class: 'slot' }, [el('div', { class: 'slot-title', text: title }), chips]);
+    };
+    g.append(chipRow('Cuerpo', [['f', 'Femenino'], ['m', 'Masculino']], cfg.sex, (v) => modSet((c) => { c.sex = v; c.colors = {}; })));
+    g.append(chipRow('Peinado', [...Object.entries(SC.mod.HAIRS), [null, 'Calvo']], cfg.hair, (v) => modSet((c) => { c.hair = v; })));
+    if (cfg.sex === 'm') {
+      const cb = el('input', { type: 'checkbox' });
+      cb.checked = !!cfg.beard;
+      cb.addEventListener('change', () => modSet((c) => { c.beard = cb.checked; }));
+      g.append(el('label', { class: 'check' }, [cb, 'Barba']));
+    }
+    for (const sl of SC.mod.SLOTS) {
+      g.append(chipRow(sl.label, [...Object.entries(SC.mod.SETS), [null, 'Ninguno']], cfg.parts[sl.id], (v) => modSet((c) => { c.parts[sl.id] = v; })));
+    }
+    if (SC.mod.loaded) {
+      const colors = el('details', { class: 'group', open: '' }, [el('summary', { text: 'Colores' })]);
+      for (const grp of SC.mod.groups) {
+        const input = el('input', { type: 'color', value: grp.color || grp.base, 'aria-label': grp.label });
+        input.addEventListener('change', () => {
+          status('Aplicando color…');
+          setTimeout(() => { SC.mod.setGroupColor(grp.id, input.value); state.ch.mod = SC.mod.config; state.modelRev++; status(''); changed(); }, 10);
+        });
+        const reset = el('button', {
+          class: 'chip', text: '↺', title: 'Color original', 'aria-label': 'Restablecer ' + grp.label,
+          onclick: () => { SC.mod.setGroupColor(grp.id, null); input.value = grp.base; state.ch.mod = SC.mod.config; state.modelRev++; changed(); },
+        });
+        colors.append(el('div', { class: 'colors' }, [el('label', { class: 'color' }, [input, grp.label]), reset]));
+      }
+      root.append(colors);
+    }
+    root.append(el('details', { class: 'group' }, [
+      el('summary', { text: 'Licencia' }),
+      infoBox([['Piezas y animaciones', 'Quaternius'], ['Licencia', 'CC0 1.0 (dominio público)'], ['Uso comercial', 'permitido'], ['Crédito', 'no obligatorio']]),
+      el('p', { class: 'hint', text: 'Todo lo que exportes con este motor se puede vender en juegos y novelas visuales. Añade más piezas con tools/build-cc0.mjs.' }),
+    ]));
+  }
+
   function buildEditor() {
     const root = $('editor');
     if (state.engine !== 'gen') {
       root.innerHTML = '';
-      if (state.engine === 'vrm') buildVrmPanel(root); else buildLpcPanel(root);
+      if (state.engine === 'vrm') buildVrmPanel(root); else if (state.engine === 'mod') buildModPanel(root); else buildLpcPanel(root);
       return;
     }
     const open = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.group));
@@ -355,7 +453,7 @@
   function buildAnimUI() {
     const chips = $('animChips');
     chips.innerHTML = '';
-    for (const a of Object.values(SC.ANIMS)) {
+    for (const a of animList()) {
       chips.append(el('button', {
         class: 'chip' + (state.anim === a.id ? ' active' : ''), text: a.name,
         onclick: () => { state.anim = a.id; state.frame = 0; state.playing = true; buildAnimUI(); },
@@ -363,8 +461,10 @@
     }
     $('btnPlay').textContent = state.playing ? '❚❚' : '▶';
     const checks = $('animChecks');
-    if (!checks.children.length) {
-      for (const a of Object.values(SC.ANIMS)) {
+    if (checks.dataset.engine !== state.engine) {
+      checks.innerHTML = '';
+      checks.dataset.engine = state.engine;
+      for (const a of animList()) {
         const cb = el('input', { type: 'checkbox' });
         cb.checked = state.exportAnims.has(a.id);
         cb.addEventListener('change', () => { if (cb.checked) state.exportAnims.add(a.id); else state.exportAnims.delete(a.id); });
@@ -412,7 +512,7 @@
     const key = JSON.stringify([state.ch, o, state.anim, state.view, state.engine, state.modelRev]);
     if (state.pxCache.key !== key) state.pxCache = { key, frames: [] };
     if (!state.pxCache.frames[i]) {
-      const a = SC.ANIMS[state.anim], pose = a.pose(i, a.frames), Eng = E();
+      const pose = poseAt(state.anim, i), Eng = E();
       state.pxCache.frames[i] = o.portrait ? Eng.renderPixelPortrait(state.ch, pose, o) : Eng.renderPixel(state.ch, pose, o);
     }
     return state.pxCache.frames[i];
@@ -428,8 +528,10 @@
     if (state.vnCache.key !== key) state.vnCache = { key, frames: [] };
     let fr = state.vnCache.frames[i];
     if (!fr) {
-      const a = SC.ANIMS[state.anim], pose = a.pose(i, a.frames);
-      if (state.engine === 'vrm') {
+      const pose = poseAt(state.anim, i);
+      if (state.engine === 'mod') {
+        fr = SC.mod.renderView(Wr, Hr, pose, { view: state.view, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
+      } else if (state.engine === 'vrm') {
         fr = SC.vrm.renderView(Wr, Hr, pose, { view: state.view, expression: state.ch.expression, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
       } else {
         const box = bust ? SC.render.bustBox(state.ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
@@ -461,13 +563,13 @@
   }
 
   function currentPose() {
-    const a = SC.ANIMS[state.anim];
-    return a.pose(state.frame % a.frames, a.frames);
+    return poseAt(state.anim, state.frame);
   }
 
   function needsModel() {
     if (state.engine === 'vrm' && !SC.vrm.loaded) return 'Carga un modelo VRM o usa el modelo de ejemplo (panel izquierdo).';
     if (state.engine === 'lpc' && !SC.lpc.loaded) return 'Carga una hoja LPC en formato PNG (panel izquierdo).';
+    if (state.engine === 'mod' && !SC.mod.loaded) return SC.mod.available ? 'Cargando piezas…' : 'El motor modular necesita WebGL.';
     return '';
   }
 
@@ -509,7 +611,8 @@
   let last = 0;
   function tick(t) {
     const anim = SC.ANIMS[state.anim];
-    if (state.playing && t - last >= 1000 / anim.fps) {
+    const fps = state.engine === 'mod' && SC.mod.loaded ? SC.mod.fps : anim.fps;
+    if (state.playing && t - last >= 1000 / fps) {
       last = t;
       state.frame = (state.frame + 1) % frameCountFor(state.anim);
       draw();
@@ -578,7 +681,7 @@
   async function doExport(kind) {
     const ch = state.ch;
     const name = X.slug(ch.name);
-    const anims = [...state.exportAnims].filter((id) => SC.ANIMS[id]);
+    const anims = [...state.exportAnims].filter((id) => animList().some((a) => a.id === id));
     const missing = needsModel();
     if (missing) return status(missing);
     const Eng = E();
@@ -599,7 +702,7 @@
           list.push({ expr: id, file });
         }
         files.push({ name: `${name}.rpy`, data: X.renpyScript(name, list) });
-        if (state.engine === 'vrm' && SC.vrm.info) files.push({ name: 'MODELO_VRM.txt', data: vrmCredits() });
+        files.push(...creditFiles());
         X.download(X.zip(files), `${name}_expresiones.zip`);
       } else if (kind === 'vn-sheet') {
         if (!anims.length) return status('Selecciona al menos una animación.');
@@ -620,7 +723,7 @@
           list.push({ expr: id, file });
         }
         files.push({ name: `${name}.rpy`, data: X.renpyScript(name, list) });
-        if (state.engine === 'vrm' && SC.vrm.info) files.push({ name: 'MODELO_VRM.txt', data: vrmCredits() });
+        files.push(...creditFiles());
         X.download(X.zip(files), `${name}_expresiones_pixel.zip`);
       } else if (kind === 'px-png') {
         const k = Number($('pxExportScale').value);
@@ -639,7 +742,7 @@
           { name: `${name}_sprites.json`, data: JSON.stringify(meta, null, 2) },
         ];
         if (lpc) files.push({ name: 'CREDITOS.txt', data: SC.lpc.credits || 'Arte LPC (Liberated Pixel Cup). Añade aquí los créditos que genera el Universal LPC Spritesheet Character Generator: la licencia CC-BY-SA / GPL obliga a acreditar a los autores.\n' });
-        if (state.engine === 'vrm' && SC.vrm.info) files.push({ name: 'MODELO_VRM.txt', data: vrmCredits() });
+        files.push(...creditFiles());
         X.download(X.zip(files), `${name}_sprites.zip`);
       }
       status('¡Exportado!');
@@ -647,6 +750,12 @@
       console.error(err);
       status('Error al exportar: ' + err.message);
     }
+  }
+
+  function creditFiles() {
+    if (state.engine === 'vrm' && SC.vrm.info) return [{ name: 'MODELO_VRM.txt', data: vrmCredits() }];
+    if (state.engine === 'mod') return [{ name: 'LICENCIA_CC0.txt', data: 'Personaje montado con piezas y animaciones de Quaternius (https://quaternius.com).\nLicencia: CC0 1.0 Universal (dominio público). Uso comercial permitido; el crédito no es obligatorio.\n' }];
+    return [];
   }
 
   function vrmCredits() {
@@ -659,8 +768,11 @@
     state.engine = e.target.value;
     state.frame = 0;
     if (state.engine === 'lpc') setMode('pixel');
+    if (!animList().some((a) => a.id === state.anim)) state.anim = 'idle';
     buildEditor();
+    buildAnimUI();
     draw();
+    if (state.engine === 'mod' && !SC.mod.loaded && SC.mod.available && !modBusy) rebuildMod();
   });
   document.querySelectorAll('.mode button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
   document.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => doExport(b.dataset.export)));

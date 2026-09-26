@@ -124,7 +124,11 @@ SC.exporter = (() => {
     const animations = {};
     rows.forEach((r, y) => {
       r.frames.forEach((f, x) => ctx.drawImage(f, x * fw, y * fh));
-      animations[r.key] = { row: y, frames: r.frames.length, fps: r.anim.fps, loop: r.anim.id !== 'attack' && r.anim.id !== 'jump' };
+      const eng = o.engine || {};
+      animations[r.key] = {
+        row: y, frames: r.frames.length, fps: eng.fps || r.anim.fps,
+        loop: eng.isLoop ? eng.isLoop(r.anim.id) : r.anim.id !== 'attack' && r.anim.id !== 'jump',
+      };
     });
     const meta = {
       generator: 'Forja de Sprites',

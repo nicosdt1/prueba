@@ -79,10 +79,40 @@ function dropOrphans(doc) {
   return n;
 }
 
+// Tras unir varios archivos cada uno trae su propio esqueleto (con los mismos
+// nombres de hueso). Se deja uno solo: las mallas, pieles y animaciones pasan a
+// usar los huesos del primero y el resto se elimina. Así los nombres son únicos.
+function unifySkeleton(doc) {
+  const root = doc.getRoot(), scenes = root.listScenes();
+  const [s0, ...others] = scenes;
+  const arm0 = s0.listChildren()[0];
+  const byName = {};
+  arm0.traverse((n) => { if (!n.getMesh()) byName[n.getName()] = n; });
+  const same = (n) => (n && byName[n.getName()]) || n;
+  for (const sk of root.listSkins()) {
+    const joints = sk.listJoints();
+    for (const j of joints) sk.removeJoint(j);
+    for (const j of joints) sk.addJoint(same(j));
+    if (sk.getSkeleton()) sk.setSkeleton(same(sk.getSkeleton()));
+  }
+  for (const a of root.listAnimations()) for (const ch of a.listChannels()) ch.setTargetNode(same(ch.getTargetNode()));
+  for (const s of others) {
+    for (const arm of s.listChildren()) {
+      for (const c of arm.listChildren()) if (c.getMesh()) arm0.addChild(c);
+      const dead = [];
+      arm.traverse((n) => { if (!n.getMesh()) dead.push(n); });
+      for (const n of dead) n.dispose();
+    }
+    s.dispose();
+  }
+}
+
 async function pack(id, files, { size = 1024, format = 'jpeg', anims = null } = {}) {
   const doc = await read(files[0]);
   for (const f of files.slice(1)) mergeDocuments(doc, await read(f));
+  unifySkeleton(doc);
   const root = doc.getRoot();
+  if (!anims) for (const a of root.listAnimations()) a.dispose();
   if (anims) {
     // Paquete de animaciones: fuera la malla del maniquí, sólo huesos y clips ('all' = todos).
     for (const n of root.listNodes()) if (n.getMesh()) n.setMesh(null);
