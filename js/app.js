@@ -45,6 +45,8 @@
     mode: 'vn',
     anim: 'idle',
     view: 'front',
+    engine: 'gen',
+    modelRev: 0,
     dirs: true,
     playing: true,
     frame: 0,
@@ -160,8 +162,106 @@
     return block;
   }
 
+  // Motor activo: generado, modelo VRM o hoja LPC.
+  const E = () => (state.engine === 'vrm' && SC.vrm.loaded ? SC.vrm : state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc : SC.render);
+  const frameCountFor = (animId) => (state.engine === 'lpc' && SC.lpc.loaded ? SC.lpc.frameCount(animId) : SC.ANIMS[animId].frames);
+
+  function infoBox(rows) {
+    const box = el('div', { class: 'info-box' });
+    for (const [k, v] of rows) {
+      const line = el('div');
+      line.append(el('b', { text: k + ': ' }), v);
+      box.append(line);
+    }
+    return box;
+  }
+
+  function expressionChips() {
+    const chips = el('div', { class: 'chips' });
+    for (const [id, e] of Object.entries(SC.EXPRESSIONS)) {
+      chips.append(el('button', {
+        class: 'chip' + (state.ch.expression === id ? ' active' : ''), text: e.name,
+        onclick: () => { state.ch.expression = id; changed(true); },
+      }));
+    }
+    return el('div', { class: 'slot' }, [el('div', { class: 'slot-title', text: 'Expresión' }), chips]);
+  }
+
+  function buildVrmPanel(root) {
+    const g = el('details', { class: 'group', open: '' }, [el('summary', { text: 'Modelo VRM' })]);
+    if (!SC.vrm.available) {
+      g.append(el('p', { class: 'hint', text: 'Este navegador no tiene WebGL, necesario para los modelos VRM. Usa el motor «Generado».' }));
+      root.append(g);
+      return;
+    }
+    const file = el('input', { type: 'file', accept: '.vrm', hidden: '' });
+    file.addEventListener('change', async () => {
+      const f = file.files[0];
+      file.value = '';
+      if (!f) return;
+      status('Cargando modelo…');
+      try { await SC.vrm.load(await f.arrayBuffer()); state.modelRev++; status('Modelo cargado.'); } catch (err) { status('No se pudo cargar: ' + err.message); }
+      changed(true);
+    });
+    g.append(el('div', { class: 'btn-col' }, [
+      el('label', { class: 'btn', text: '📂 Cargar modelo VRM…' }, [file]),
+      el('button', {
+        id: 'btnVrmDemo', text: '✨ Usar modelo de ejemplo',
+        onclick: async () => {
+          status('Cargando modelo de ejemplo…');
+          try { await SC.vrm.loadDemo(); state.modelRev++; status('Modelo de ejemplo cargado.'); } catch (err) { status('Error: ' + err.message); }
+          changed(true);
+        },
+      }),
+    ]));
+    const info = SC.vrm.info;
+    if (info) {
+      g.append(infoBox([
+        ['Modelo', info.name], ['Autoría', (info.authors || []).join(', ') || '—'], ['Licencia', info.license || '—'],
+        ['Uso comercial', info.commercial], ['Redistribución', info.redistribution], ['Crédito', info.credit],
+      ]));
+    }
+    g.append(el('p', { class: 'hint', text: 'Crea tus personajes gratis con VRoid Studio (exporta en .vrm) y cárgalos aquí. Poses, vistas, expresiones y exportaciones funcionan igual que con el motor generado. Respeta la licencia de cada modelo.' }));
+    root.append(g);
+    const c = el('details', { class: 'group', open: '' }, [el('summary', { text: 'Cara' })]);
+    c.append(expressionChips());
+    root.append(c);
+  }
+
+  function buildLpcPanel(root) {
+    const g = el('details', { class: 'group', open: '' }, [el('summary', { text: 'Hoja LPC' })]);
+    const file = el('input', { type: 'file', accept: 'image/png', hidden: '' });
+    file.addEventListener('change', async () => {
+      const f = file.files[0];
+      file.value = '';
+      if (!f) return;
+      try { await SC.lpc.load(f); state.modelRev++; setMode('pixel'); status('Hoja LPC cargada.'); } catch (err) { status('No se pudo cargar: ' + err.message); }
+      changed(true);
+    });
+    const cred = el('input', { type: 'file', accept: '.txt,.csv,text/plain', hidden: '' });
+    cred.addEventListener('change', async () => {
+      const f = cred.files[0];
+      cred.value = '';
+      if (f) { SC.lpc.setCredits(await f.text()); status('Créditos cargados.'); changed(true); }
+    });
+    g.append(el('div', { class: 'btn-col' }, [
+      el('label', { class: 'btn', text: '📂 Cargar hoja LPC (.png)…' }, [file]),
+      el('label', { class: 'btn', text: '📄 Cargar créditos (.txt / .csv)…' }, [cred]),
+    ]));
+    if (SC.lpc.loaded) {
+      g.append(infoBox([['Hoja', SC.lpc.name], ['Formato', SC.lpc.extended ? 'ampliado (con reposo, correr y saltar)' : 'estándar'], ['Créditos', SC.lpc.credits ? 'cargados' : 'pendientes']]));
+    }
+    g.append(el('p', { class: 'hint', text: 'Crea la hoja con el Universal LPC Spritesheet Character Generator y descarga también su archivo de créditos: el arte LPC es CC-BY-SA / GPL y hay que acreditar a sus autores. Los créditos se incluyen al exportar.' }));
+    root.append(g);
+  }
+
   function buildEditor() {
     const root = $('editor');
+    if (state.engine !== 'gen') {
+      root.innerHTML = '';
+      if (state.engine === 'vrm') buildVrmPanel(root); else buildLpcPanel(root);
+      return;
+    }
     const open = new Set([...root.querySelectorAll('details[open]')].map((d) => d.dataset.group));
     const first = !root.children.length;
     root.innerHTML = '';
@@ -277,9 +377,9 @@
 
   function pixelFrames() {
     const o = pxOptions();
-    const key = JSON.stringify([state.ch, o, state.anim, state.view]);
+    const key = JSON.stringify([state.ch, o, state.anim, state.view, state.engine, state.modelRev]);
     if (state.pxCache.key !== key) {
-      state.pxCache = { key, frames: SC.render.renderAnimation(state.ch, state.anim, 'pixel', o) };
+      state.pxCache = { key, frames: E().renderAnimation(state.ch, state.anim, 'pixel', o) };
     }
     return state.pxCache.frames;
   }
@@ -289,22 +389,49 @@
     return a.pose(state.frame % a.frames, a.frames);
   }
 
+  function needsModel() {
+    if (state.engine === 'vrm' && !SC.vrm.loaded) return 'Carga un modelo VRM o usa el modelo de ejemplo (panel izquierdo).';
+    if (state.engine === 'lpc' && !SC.lpc.loaded) return 'Carga una hoja LPC en formato PNG (panel izquierdo).';
+    return '';
+  }
+
   function draw() {
     const W = view.width, H = view.height;
     vctx.setTransform(1, 0, 0, 1, 0, 0);
     vctx.clearRect(0, 0, W, H);
-    const anim = SC.ANIMS[state.anim];
+    const nFrames = frameCountFor(state.anim);
+    $('frameInfo').textContent = `${(state.frame % nFrames) + 1}/${nFrames}`;
+    const missing = needsModel();
+    if (missing) {
+      vctx.fillStyle = getComputedStyle(document.body).color;
+      vctx.font = `${Math.round(15 * (window.devicePixelRatio || 1))}px system-ui, sans-serif`;
+      vctx.textAlign = 'center';
+      vctx.fillText(missing, W / 2, H / 2);
+      return;
+    }
+    if (state.engine === 'lpc') {
+      const f = SC.lpc.frame(state.anim, state.view, state.frame);
+      const zoom = Math.max(1, Math.floor(Math.min(W / f.width, H / f.height) * 0.8));
+      vctx.imageSmoothingEnabled = false;
+      vctx.drawImage(f, Math.round((W - f.width * zoom) / 2), Math.round((H - f.height * zoom) / 2), f.width * zoom, f.height * zoom);
+      return;
+    }
     if (state.mode === 'vn') {
-      const box = $('vnFrame').value === 'bust' ? SC.render.bustBox(state.ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
-      const k = Math.min(W / box.w, H / box.h) * 0.94;
+      const bust = $('vnFrame').value === 'bust';
       // Caché de fotogramas: tras la primera vuelta la animación no se recalcula.
-      const key = JSON.stringify([state.ch, state.view, state.anim, W, H, $('vnFrame').value]);
+      const key = JSON.stringify([state.ch, state.view, state.anim, W, H, bust, state.engine, state.modelRev]);
       if (state.vnCache.key !== key) state.vnCache = { key, frames: [] };
-      const fi = state.frame % anim.frames;
+      const fi = state.frame % nFrames;
       let fr = state.vnCache.frames[fi];
       if (!fr) {
-        fr = SC.render.makeCanvas(W, H);
-        SC.render.paintVN(fr.getContext('2d'), W, H, [k, 0, 0, k, (W - box.w * k) / 2 - box.x * k, (H - box.h * k) / 2 - box.y * k], state.ch, currentPose(), { view: state.view });
+        if (state.engine === 'vrm') {
+          fr = SC.vrm.renderView(W, H, currentPose(), { view: state.view, expression: state.ch.expression, frame: bust ? 'bust' : 'full', lineWidth: state.ch.style.lineWidth });
+        } else {
+          const box = bust ? SC.render.bustBox(state.ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
+          const k = Math.min(W / box.w, H / box.h) * 0.94;
+          fr = SC.render.makeCanvas(W, H);
+          SC.render.paintVN(fr.getContext('2d'), W, H, [k, 0, 0, k, (W - box.w * k) / 2 - box.x * k, (H - box.h * k) / 2 - box.y * k], state.ch, currentPose(), { view: state.view });
+        }
         state.vnCache.frames[fi] = fr;
       }
       vctx.drawImage(fr, 0, 0);
@@ -315,7 +442,6 @@
       vctx.imageSmoothingEnabled = false;
       vctx.drawImage(f, Math.round((W - f.width * zoom) / 2), Math.round((H - f.height * zoom) / 2), f.width * zoom, f.height * zoom);
     }
-    $('frameInfo').textContent = `${(state.frame % anim.frames) + 1}/${anim.frames}`;
   }
 
   let last = 0;
@@ -323,7 +449,7 @@
     const anim = SC.ANIMS[state.anim];
     if (state.playing && t - last >= 1000 / anim.fps) {
       last = t;
-      state.frame = (state.frame + 1) % anim.frames;
+      state.frame = (state.frame + 1) % frameCountFor(state.anim);
       draw();
     }
     requestAnimationFrame(tick);
@@ -391,25 +517,31 @@
     const ch = state.ch;
     const name = X.slug(ch.name);
     const anims = [...state.exportAnims].filter((id) => SC.ANIMS[id]);
+    const missing = needsModel();
+    if (missing) return status(missing);
+    const Eng = E();
+    const lpc = state.engine === 'lpc';
+    if (lpc && (kind.startsWith('vn-') || kind === 'px-expr')) return status('Con una hoja LPC sólo se exportan sprites de juego.');
     try {
       status('Generando…');
       await new Promise((res) => setTimeout(res, 20));
       if (kind === 'vn-png') {
-        const cv = SC.render.renderVN(ch, currentPose(), vnOptions());
+        const cv = Eng.renderVN(ch, currentPose(), vnOptions());
         X.download(await X.canvasBlob(cv), `${name}_${ch.expression}.png`);
       } else if (kind === 'vn-expr') {
         const files = [], list = [];
         for (const id of Object.keys(SC.EXPRESSIONS)) {
-          const cv = SC.render.renderVN(ch, null, Object.assign(vnOptions(), { expression: id }));
+          const cv = Eng.renderVN(ch, null, Object.assign(vnOptions(), { expression: id }));
           const file = `${name}_${id}.png`;
           files.push({ name: `${name}/${file}`, data: await X.canvasBytes(cv) });
           list.push({ expr: id, file });
         }
         files.push({ name: `${name}.rpy`, data: X.renpyScript(name, list) });
+        if (state.engine === 'vrm' && SC.vrm.info) files.push({ name: 'MODELO_VRM.txt', data: vrmCredits() });
         X.download(X.zip(files), `${name}_expresiones.zip`);
       } else if (kind === 'vn-sheet') {
         if (!anims.length) return status('Selecciona al menos una animación.');
-        const { canvas, meta } = X.spritesheet(ch, anims, 'vn', { frame: $('vnFrame').value, height: 500, view: state.view }, `${name}_hoja`);
+        const { canvas, meta } = X.spritesheet(ch, anims, 'vn', { frame: $('vnFrame').value, height: 500, view: state.view, engine: Eng }, `${name}_hoja`);
         X.download(X.zip([
           { name: `${name}_hoja.png`, data: await X.canvasBytes(canvas) },
           { name: `${name}_hoja.json`, data: JSON.stringify(meta, null, 2) },
@@ -420,29 +552,33 @@
         [po.w, po.h] = $('pxPortraitSize').value.split('x').map(Number);
         const files = [], list = [];
         for (const id of Object.keys(SC.EXPRESSIONS)) {
-          const cv = X.upscale(SC.render.renderPixelPortrait(ch, null, Object.assign({}, po, { expression: id })), k);
+          const cv = X.upscale(Eng.renderPixelPortrait(ch, null, Object.assign({}, po, { expression: id })), k);
           const file = `${name}_${id}.png`;
           files.push({ name: `${name}/${file}`, data: await X.canvasBytes(cv) });
           list.push({ expr: id, file });
         }
         files.push({ name: `${name}.rpy`, data: X.renpyScript(name, list) });
+        if (state.engine === 'vrm' && SC.vrm.info) files.push({ name: 'MODELO_VRM.txt', data: vrmCredits() });
         X.download(X.zip(files), `${name}_expresiones_pixel.zip`);
       } else if (kind === 'px-png') {
         const k = Number($('pxExportScale').value);
         const po = pxOptions();
-        const f = po.portrait ? SC.render.renderPixelPortrait(ch, currentPose(), po) : SC.render.renderPixel(ch, currentPose(), po);
+        const f = lpc ? SC.lpc.frame(state.anim, state.view, state.frame) : po.portrait ? Eng.renderPixelPortrait(ch, currentPose(), po) : Eng.renderPixel(ch, currentPose(), po);
         X.download(await X.canvasBlob(X.upscale(f, k)), `${name}_${state.anim}_${state.frame + 1}.png`);
       } else if (kind === 'px-sheet') {
         if (!anims.length) return status('Selecciona al menos una animación.');
         const k = Number($('pxExportScale').value);
-        const po = pxOptions();
-        const { canvas, meta } = X.spritesheet(ch, anims, 'pixel', po, `${name}_sprites`, $('pxDirs').checked && !po.portrait ? DIRS : null);
+        const po = Object.assign(pxOptions(), { engine: Eng });
+        const { canvas, meta } = X.spritesheet(ch, anims, 'pixel', po, `${name}_sprites`, (lpc || $('pxDirs').checked) && !po.portrait ? DIRS : null);
         meta.frameWidth *= k;
         meta.frameHeight *= k;
-        X.download(X.zip([
+        const files = [
           { name: `${name}_sprites.png`, data: await X.canvasBytes(X.upscale(canvas, k)) },
           { name: `${name}_sprites.json`, data: JSON.stringify(meta, null, 2) },
-        ]), `${name}_sprites.zip`);
+        ];
+        if (lpc) files.push({ name: 'CREDITOS.txt', data: SC.lpc.credits || 'Arte LPC (Liberated Pixel Cup). Añade aquí los créditos que genera el Universal LPC Spritesheet Character Generator: la licencia CC-BY-SA / GPL obliga a acreditar a los autores.\n' });
+        if (state.engine === 'vrm' && SC.vrm.info) files.push({ name: 'MODELO_VRM.txt', data: vrmCredits() });
+        X.download(X.zip(files), `${name}_sprites.zip`);
       }
       status('¡Exportado!');
     } catch (err) {
@@ -451,7 +587,19 @@
     }
   }
 
+  function vrmCredits() {
+    const i = SC.vrm.info;
+    return `Modelo: ${i.name}\nAutoría: ${(i.authors || []).join(', ')}\n${i.copyright || ''}\nLicencia: ${i.license} ${i.licenseUrl}\nUso comercial: ${i.commercial}\nRedistribución: ${i.redistribution}\nCrédito: ${i.credit}\n`;
+  }
+
   // ---------- Eventos ----------
+  $('engine').addEventListener('change', (e) => {
+    state.engine = e.target.value;
+    state.frame = 0;
+    if (state.engine === 'lpc') setMode('pixel');
+    buildEditor();
+    draw();
+  });
   document.querySelectorAll('.mode button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)));
   document.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => doExport(b.dataset.export)));
   $('btnPlay').addEventListener('click', () => { state.playing = !state.playing; buildAnimUI(); });

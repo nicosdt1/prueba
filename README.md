@@ -12,10 +12,28 @@ Un mismo personaje se puede exportar de dos formas:
   proporciones chibi opcionales, contorno exterior y animaciones en **4 direcciones**
   (abajo, izquierda, derecha, arriba) listas en hojas de sprites.
 
+## Motores de dibujo
+
+| Motor | Para qué | Requisitos |
+| --- | --- | --- |
+| **Modelo VRM (anime 3D)** | Máxima calidad: anatomía y caras de nivel profesional, pelo con física, expresiones reales. Carga modelos `.vrm` (por ejemplo creados gratis con [VRoid Studio](https://vroid.com/en/studio)) y los pone en pose, gira, cambia de expresión y exporta con las mismas opciones. Incluye un modelo de ejemplo. | WebGL (cualquier gráfica integrada) |
+| **Generado (ligero)** | Personajes 100 % procedurales con ropa y accesorios intercambiables. | Sólo Canvas 2D |
+| **Hoja LPC (pixel art)** | Importa hojas del [Universal LPC Spritesheet Character Generator](https://github.com/liberatedpixelcup/Universal-LPC-Spritesheet-Character-Generator), las reproduce con nuestras animaciones y vistas y las reexporta con créditos. | Sólo Canvas 2D |
+
+El motor VRM usa [three.js](https://github.com/mrdoob/three.js) y
+[three-vrm](https://github.com/pixiv/three-vrm) (licencia MIT), empaquetados en
+`vendor/vrm-bundle.js` para que todo funcione sin conexión. La app muestra la licencia de cada
+modelo al cargarlo y añade un archivo de créditos a las exportaciones.
+
+> Las condiciones de VRoid Studio permiten usar los modelos que exportes (también
+> comercialmente), pero no crear aplicaciones que generen modelos combinando piezas hechas con
+> VRoid. Por eso la app no mezcla piezas: renderiza el modelo que tú cargas.
+
 ## Requisitos
 
-Ninguno. Es HTML + JavaScript puro con Canvas 2D: sin dependencias, sin WebGL, sin conexión
-a internet. Funciona en cualquier PC con un navegador moderno (Chrome, Edge, Firefox) y no
+Ninguno que instalar. Es HTML + JavaScript: se abre con doble clic y funciona sin conexión. El
+motor generado y el de LPC sólo usan Canvas 2D; el motor VRM necesita WebGL, disponible en
+cualquier gráfica integrada. Funciona en cualquier PC con un navegador moderno (Chrome, Edge, Firefox) y no
 necesita tarjeta gráfica dedicada (≈20 ms por fotograma en CPU).
 
 ## Cómo usarlo
@@ -86,6 +104,8 @@ Grid by Cell Size), GameMaker, RPG Maker, Phaser, etc.
 
 ```
 js/
+  vrm/engine.js    motor VRM (three-vrm): carga, poses, expresiones, vistas y encuadres
+  lpc/lpc.js       importador de hojas LPC
   core/
     util.js        colores, vectores 3D, matrices de rotación y primitivas 2D
     volume.js      motor 2.5D: secciones, proyección, siluetas, sombreado y calcos de superficie

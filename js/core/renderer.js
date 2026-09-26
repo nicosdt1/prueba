@@ -339,7 +339,15 @@ SC.render = (() => {
       detail: 'high', line: (SS * 0.85) / k, lineMode: o.lineMode || 'colored',
       expression: o.expression, view: o.view,
     });
-    const src = c.getImageData(0, 0, W * SS, H * SS).data;
+    return pixelize(big, W, H, o);
+  }
+
+  // Convierte una imagen a 4× en pixel art de W×H: color predominante por
+  // bloque (priorizando tonos oscuros para no perder líneas y ojos), paleta
+  // limitada y contorno exterior. Lo usan el retrato y el motor VRM.
+  function pixelize(big, W, H, o = {}) {
+    const SS = Math.round(big.width / W);
+    const src = big.getContext('2d').getImageData(0, 0, W * SS, H * SS).data;
     const out = new Uint8ClampedArray(W * H * 4);
     const counts = new Map();
     for (let y = 0; y < H; y++) {
@@ -353,7 +361,7 @@ SC.render = (() => {
           const r = src[i], g = src[i + 1], b = src[i + 2];
           const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
           const lum = (r * 0.3 + g * 0.59 + b * 0.11) / 255;
-          const wgt = 1 + (lum < 0.32 ? 1.4 : 0);
+          const wgt = 1 + (lum < 0.32 ? (o.darkBoost != null ? o.darkBoost : 1.4) : 0);
           const e = counts.get(key);
           if (e) e.n += wgt; else counts.set(key, { n: wgt, r, g, b });
         }
@@ -478,5 +486,17 @@ SC.render = (() => {
     return frames;
   }
 
-  return { makeCanvas, drawCharacter, vnDrawOpts, paintVN, renderVN, renderPixel, renderPixelPortrait, renderAnimation, bustBox };
+  // Contorno exterior grueso para una imagen ya renderizada (lo usa el motor VRM).
+  function outlineImage(dst, src, r, color) {
+    const sil = makeCanvas(src.width, src.height), sctx = sil.getContext('2d');
+    sctx.drawImage(src, 0, 0);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = color;
+    sctx.fillRect(0, 0, sil.width, sil.height);
+    const n = 10;
+    for (let i = 0; i < n; i++) dst.drawImage(sil, Math.cos((i / n) * Math.PI * 2) * r, Math.sin((i / n) * Math.PI * 2) * r);
+    dst.drawImage(src, 0, 0);
+  }
+
+  return { makeCanvas, drawCharacter, vnDrawOpts, paintVN, renderVN, renderPixel, renderPixelPortrait, renderAnimation, bustBox, pixelize, outlineImage };
 })();

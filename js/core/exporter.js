@@ -114,7 +114,7 @@ SC.exporter = (() => {
     const rows = [];
     for (const id of animIds) {
       for (const d of D) {
-        rows.push({ anim: SC.ANIMS[id], key: d.dir ? `${id}_${d.dir}` : id, frames: SC.render.renderAnimation(ch, id, mode, Object.assign({}, o, { view: d.view })) });
+        rows.push({ anim: SC.ANIMS[id], key: d.dir ? `${id}_${d.dir}` : id, frames: (o.engine || SC.render).renderAnimation(ch, id, mode, Object.assign({}, o, { view: d.view })) });
       }
     }
     const fw = rows[0].frames[0].width, fh = rows[0].frames[0].height;
