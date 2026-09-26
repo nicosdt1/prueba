@@ -77,7 +77,21 @@
 
       <div id="pxOptions" hidden>
         <h2>Juego · pixel art</h2>
-        <label class="row">Tamaño del fotograma
+        <label class="row">Tipo
+          <select id="pxType">
+            <option value="sprite">Sprite de juego (cuerpo entero)</option>
+            <option value="portrait">Retrato de novela visual (busto)</option>
+          </select>
+        </label>
+        <label class="row" id="pxPortraitRow" hidden>Tamaño del retrato
+          <select id="pxPortraitSize">
+            <option>96x120</option>
+            <option selected>128x160</option>
+            <option>160x200</option>
+            <option>200x250</option>
+          </select>
+        </label>
+        <label class="row" id="pxSizeRow">Tamaño del fotograma
           <select id="pxSize">
             <option>32x32</option>
             <option>32x48</option>
@@ -87,10 +101,10 @@
             <option>96x128</option>
           </select>
         </label>
-        <label class="check"><input id="pxChibi" type="checkbox" checked> Proporciones chibi</label>
+        <label class="check" id="pxChibiRow"><input id="pxChibi" type="checkbox" checked> Proporciones chibi</label>
         <label class="check"><input id="pxOutline" type="checkbox" checked> Contorno exterior</label>
         <label class="check"><input id="pxInner" type="checkbox" checked> Líneas interiores</label>
-        <label class="check"><input id="pxDirs" type="checkbox" checked> 4 direcciones (abajo, izquierda, derecha, arriba)</label>
+        <label class="check" id="pxDirsRow"><input id="pxDirs" type="checkbox" checked> 4 direcciones (abajo, izquierda, derecha, arriba)</label>
         <label class="row">Escala al exportar
           <select id="pxExportScale">
             <option value="1" selected>×1 (tamaño real)</option>
@@ -101,6 +115,7 @@
         <div class="export">
           <button data-export="px-png">PNG del fotograma</button>
           <button data-export="px-sheet">Hoja de sprites + JSON (ZIP)</button>
+          <button data-export="px-expr">Pack de expresiones pixel (ZIP + Ren'Py)</button>
         </div>
       </div>
 

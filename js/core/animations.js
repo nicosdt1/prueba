@@ -11,10 +11,11 @@ SC.ANIMS = (() => {
       id: 'idle', name: 'Reposo', frames: 4, fps: 4,
       pose(i, n) {
         const br = (1 - Math.cos((i / n) * TAU)) / 2;
-        return {
-          breathe: br, sway: br * 0.004, headTilt: br * 0.015,
-          arms: [arm({ abd: 0.12 + br * 0.02 }), arm({ abd: 0.12 + br * 0.02 })],
-        };
+        const rest = SC.restPose();
+        return Object.assign(rest, {
+          breathe: br, sway: rest.sway + br * 0.003, headTilt: rest.headTilt + br * 0.015,
+          arms: [arm({ abd: 0.17 + br * 0.02, bend: 0.3, flex: 0.1 }), arm({ abd: 0.1 + br * 0.02, bend: 0.14, flex: -0.04 })],
+        });
       },
     },
     {
@@ -79,11 +80,11 @@ SC.ANIMS = (() => {
     },
     {
       id: 'talk', name: 'Hablar', frames: 4, fps: 8,
-      pose(i) { return { mouth: ['talkA', 'talkB', 'talkA', null][i], breathe: i % 2 ? 0.3 : 0, headNod: i % 2 ? 0.02 : 0 }; },
+      pose(i) { return Object.assign(SC.restPose(), { mouth: ['talkA', 'talkB', 'talkA', null][i], breathe: i % 2 ? 0.3 : 0, headNod: 0.03 + (i % 2 ? 0.02 : 0) }); },
     },
     {
       id: 'blink', name: 'Parpadear', frames: 4, fps: 6,
-      pose(i) { return { blink: i === 2 }; },
+      pose(i) { return Object.assign(SC.restPose(), { blink: i === 2 }); },
     },
   ];
   const map = {};

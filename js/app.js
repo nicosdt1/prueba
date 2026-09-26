@@ -256,9 +256,10 @@
   }
 
   function pxOptions() {
-    const [w, h] = $('pxSize').value.split('x').map(Number);
+    const portrait = $('pxType').value === 'portrait';
+    const [w, h] = (portrait ? $('pxPortraitSize') : $('pxSize')).value.split('x').map(Number);
     return {
-      w, h,
+      w, h, portrait,
       chibi: $('pxChibi').checked,
       outline: $('pxOutline').checked,
       innerLines: $('pxInner').checked,
@@ -413,14 +414,29 @@
           { name: `${name}_hoja.png`, data: await X.canvasBytes(canvas) },
           { name: `${name}_hoja.json`, data: JSON.stringify(meta, null, 2) },
         ]), `${name}_animaciones_vn.zip`);
+      } else if (kind === 'px-expr') {
+        const k = Number($('pxExportScale').value);
+        const po = Object.assign(pxOptions(), { portrait: true });
+        [po.w, po.h] = $('pxPortraitSize').value.split('x').map(Number);
+        const files = [], list = [];
+        for (const id of Object.keys(SC.EXPRESSIONS)) {
+          const cv = X.upscale(SC.render.renderPixelPortrait(ch, null, Object.assign({}, po, { expression: id })), k);
+          const file = `${name}_${id}.png`;
+          files.push({ name: `${name}/${file}`, data: await X.canvasBytes(cv) });
+          list.push({ expr: id, file });
+        }
+        files.push({ name: `${name}.rpy`, data: X.renpyScript(name, list) });
+        X.download(X.zip(files), `${name}_expresiones_pixel.zip`);
       } else if (kind === 'px-png') {
         const k = Number($('pxExportScale').value);
-        const f = SC.render.renderPixel(ch, currentPose(), pxOptions());
+        const po = pxOptions();
+        const f = po.portrait ? SC.render.renderPixelPortrait(ch, currentPose(), po) : SC.render.renderPixel(ch, currentPose(), po);
         X.download(await X.canvasBlob(X.upscale(f, k)), `${name}_${state.anim}_${state.frame + 1}.png`);
       } else if (kind === 'px-sheet') {
         if (!anims.length) return status('Selecciona al menos una animación.');
         const k = Number($('pxExportScale').value);
-        const { canvas, meta } = X.spritesheet(ch, anims, 'pixel', pxOptions(), `${name}_sprites`, $('pxDirs').checked ? DIRS : null);
+        const po = pxOptions();
+        const { canvas, meta } = X.spritesheet(ch, anims, 'pixel', po, `${name}_sprites`, $('pxDirs').checked && !po.portrait ? DIRS : null);
         meta.frameWidth *= k;
         meta.frameHeight *= k;
         X.download(X.zip([
@@ -463,7 +479,15 @@
   $('charName').addEventListener('input', (e) => { state.ch.name = e.target.value; changed(); });
   $('lineMode').addEventListener('change', (e) => { state.ch.style.lineMode = e.target.value; changed(); });
   $('lineWidth').addEventListener('input', (e) => { state.ch.style.lineWidth = Number(e.target.value); changed(); });
-  for (const id of ['vnFrame', 'pxSize', 'pxChibi', 'pxOutline', 'pxInner']) $(id).addEventListener('change', draw);
+  for (const id of ['vnFrame', 'pxSize', 'pxChibi', 'pxOutline', 'pxInner', 'pxPortraitSize']) $(id).addEventListener('change', draw);
+  $('pxType').addEventListener('change', () => {
+    const portrait = $('pxType').value === 'portrait';
+    $('pxPortraitRow').hidden = !portrait;
+    $('pxSizeRow').hidden = portrait;
+    $('pxChibiRow').hidden = portrait;
+    $('pxDirsRow').hidden = portrait;
+    draw();
+  });
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && !/INPUT|SELECT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)) {
       e.preventDefault();

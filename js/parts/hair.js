@@ -77,10 +77,10 @@
     return U.clamp(phi, lo, hi);
   }
 
-  function bottomFn(st) {
+  function bottomFn(st, trim = 0) {
     return (phi) => {
       const c = Math.cos(phi);
-      return c >= 0 ? U.lerp(st.side, st.hairline, Math.pow(c, 0.8)) : U.lerp(st.side, st.nape, Math.pow(-c, 0.8));
+      return (c >= 0 ? U.lerp(st.side, st.hairline, Math.pow(c, 0.8)) : U.lerp(st.side, st.nape, Math.pow(-c, 0.8))) - trim * (1 - Math.max(0, c));
     };
   }
 
@@ -164,6 +164,158 @@
     return vol;
   }
 
+  // ---------- Mechones ----------
+  // El pelo "dibujado" está hecho de mechones: cada uno nace en el cuero
+  // cabelludo, sigue la superficie de la cabeza, cae por gravedad sin
+  // atravesar el cuerpo y termina en punta. Cada mechón tiene su sombra
+  // (lado contrario a la luz), un brillo cerca de la raíz y su contorno.
+
+  // Empuja un punto fuera del torso (el pelo largo cae sobre hombros y espalda).
+  function outsideBody(rig, p) {
+    const keys = rig.torso.keys;
+    let s = null;
+    for (const k of keys) if (k.s.c.y <= p.y) s = k.s;
+    if (!s || p.y > keys[keys.length - 1].s.c.y) return p;
+    const dx = p.x - s.c.x, dz = p.z - s.c.z;
+    const bz = dz >= 0 ? s.b : s.b2;
+    const d = Math.hypot(dx / (s.a * 1.12), dz / (bz * 1.12 + 1e-6));
+    if (d >= 1) return p;
+    const k = 1 / Math.max(d, 0.05);
+    return Vc.v(s.c.x + dx * k, p.y, s.c.z + dz * k);
+  }
+
+  function clumpPts(rig, Hd, c) {
+    const H = rig.head, pts = [], N = c.n || 10, lh = 0.86;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, l = U.lerp(c.l0, c.l1, t);
+      const phi = c.phi + (c.drift || 0) * t + (c.wave || 0) * Math.sin(t * PI * 3);
+      const out = c.out * (1 - 0.3 * t) + (c.flare || 0) * H.w * t * t;
+      let p = V.surf(Hd.at(Math.min(l, lh)), phi, out);
+      if (l > lh) {
+        const s = Hd.at(lh), n = Vc.sub(p, s.c);
+        const nh = Vc.norm(Vc.v(n.x, 0, n.z));
+        p = Vc.add(p, Vc.v(nh.x * H.w * 0.12 * (c.spread || 1), (l - lh) * H.h, nh.z * H.w * 0.12 * (c.spread || 1)));
+        p = outsideBody(rig, p);
+      }
+      if (c.lift) p = Vc.add(p, Vc.v(0, -c.lift * H.h * t * t, 0));
+      pts.push(p);
+    }
+    return pts;
+  }
+
+  // Genera los mechones de un peinado (determinista para cada estilo).
+  function makeClumps(rig, st, id) {
+    if (st.thin) return [];
+    const r = U.rng([...id].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7));
+    const H = rig.head, e = st.vol * H.w, out = [];
+    const longL = st.sheet ? 1 + st.sheet.len * lenK(rig) : null;
+    const add = (o) => out.push(Object.assign({ out: e * 0.9, w: 0.3 }, o));
+    // Flequillo: un mechón por cada punta del perfil del flequillo.
+    (st.bangs || []).forEach(([phi, l], i, arr) => {
+      const gap = i ? Math.abs(phi - arr[i - 1][0]) : Math.abs(arr[1][0] - phi);
+      add({ phi: phi * 0.8 + (r() - 0.5) * 0.06, drift: phi * 0.22 + (r() - 0.5) * 0.12, l0: st.hairline - 0.2, l1: l + 0.02 + (r() - 0.5) * 0.04, w: gap * (1.1 + r() * 0.4), out: e * 0.85, kind: 'bang', wave: st.curly ? 0.06 : 0.02, root: 0.35 });
+    });
+    if (st.swept) {
+      for (let i = 0; i < 9; i++) {
+        const phi = -1.2 + (2.4 * i) / 8;
+        add({ phi, drift: 0.35 * Math.sign(phi || 1) + (r() - 0.5) * 0.2, l0: st.hairline - 0.05, l1: 0.35 + r() * 0.1, w: 0.42, out: e * 1.1, flare: 0.1, kind: 'bang' });
+      }
+    }
+    // Coronilla: mechones radiales desde el remolino.
+    const nc = st.spikes ? 10 : 8;
+    for (let i = 0; i < nc; i++) {
+      const phi = (i / nc) * PI * 2 + r() * 0.3;
+      add({ phi, drift: (r() - 0.5) * 0.4, l0: 0.05, l1: 0.3 + r() * 0.12, w: 0.5, out: e * 0.8, flare: st.spikes ? 0.35 : 0.03, lift: st.spikes ? 0.12 : 0, kind: 'crown', root: 0.25 });
+    }
+    // Laterales y nuca.
+    const sideEnd = st.hang && !longL ? st.side + 0.08 : st.side + 0.05;
+    // Mechones delanteros largos que caen sobre el pecho.
+    for (const lk of st.locks || []) {
+      for (let j = 0; j < 2; j++) {
+        add({ phi: lk.phi * (1 + j * 0.1), drift: Math.sign(lk.phi) * 0.1, l0: st.hairline + 0.02, l1: 1 + lk.len * lenK(rig) * (0.85 + j * 0.15), w: lk.w * 1.6, out: e * 0.8, kind: 'side', spread: 0.6 });
+      }
+    }
+    for (const sgn of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const long = longL && i > 0;
+        const phi = sgn * ((long ? 1.75 : 1.25) + i * 0.28 + r() * 0.08);
+        add({ phi, drift: sgn * 0.08, l0: 0.12 + r() * 0.08, l1: long ? longL * (0.8 + r() * 0.25) : sideEnd + r() * 0.08, w: 0.42, out: e, kind: 'side', flare: st.spikes ? 0.25 : 0, wave: st.curly ? 0.08 : 0 });
+      }
+    }
+    const nb = longL ? 11 : 8;
+    for (let i = 0; i < nb; i++) {
+      const phi = 1.95 + ((2 * PI - 3.9) * i) / (nb - 1) + (r() - 0.5) * 0.12;
+      const l1 = longL ? longL * (0.85 + r() * 0.2) : st.nape + 0.04 + r() * 0.08;
+      add({ phi, drift: (r() - 0.5) * 0.15, l0: 0.08 + r() * 0.1, l1, w: longL ? 0.5 : 0.45, out: e, kind: 'back', spread: longL ? 1.4 : 1, flare: st.spikes ? 0.3 : 0, wave: st.curly ? 0.08 : 0 });
+    }
+    return out;
+  }
+
+  // Dibuja un mechón como polígono afilado con sombra, brillo y contorno.
+  function drawClump(ctx, rig, P, width, color, rootW) {
+    const n = P.length, L = [], R = [], nrm = [];
+    for (let i = 0; i < n; i++) {
+      const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)];
+      let tx = b.x - a.x, ty = b.y - a.y;
+      const l = Math.hypot(tx, ty) || 1;
+      tx /= l; ty /= l;
+      const t = i / (n - 1);
+      const r0 = rootW != null ? rootW : 0.75;
+      const w = width * (t < 0.2 ? r0 + ((1 - r0) * t) / 0.2 : 1) * Math.pow(1 - t, 0.75) + (i === n - 1 ? 0 : 0.2);
+      nrm.push({ x: -ty, y: tx, w });
+      L.push({ x: P[i].x - ty * w, y: P[i].y + tx * w });
+      R.push({ x: P[i].x + ty * w, y: P[i].y - tx * w });
+    }
+    const outline = L.concat(R.slice().reverse());
+    const hi = rig.detail === 'high';
+    const trace = (q, pts) => (hi ? SC.draw.smooth(q, pts, true) : SC.draw.poly(q, pts));
+    if (SC.ID) { SC.draw.fill(ctx, color, (q) => SC.draw.poly(q, outline)); return; }
+    if (rig.line > 0) SC.draw.stroke(ctx, SC.draw.lineColor(rig, color), rig.line * 1.6, (q) => trace(q, outline));
+    ctx.beginPath(); trace(ctx, outline); ctx.fillStyle = color; ctx.fill();
+    // Lado en sombra: el opuesto a la luz (arriba-izquierda).
+    const mid = Math.floor(n / 2), lit = nrm[mid].x * -0.55 + nrm[mid].y * -0.83 > 0 ? -1 : 1;
+    const side = lit > 0 ? L : R, sh = [];
+    for (let i = 1; i < n; i++) sh.push({ x: U.lerp(P[i].x, side[i].x, 0.15), y: U.lerp(P[i].y, side[i].y, 0.15) });
+    const shadow = U.multiply(color, V.MATERIALS.hair.tint);
+    ctx.save();
+    ctx.beginPath(); trace(ctx, outline); ctx.clip();
+    SC.draw.fill(ctx, rig.pixel ? U.multiply(shadow, '#d6c8e4') : shadow, (q) => SC.draw.poly(q, sh.concat(side.slice(1).reverse())));
+    // Brillo junto a la raíz, en el lado iluminado.
+    const other = lit > 0 ? R : L, i0 = Math.round(n * 0.12), i1 = Math.round(n * (hi ? 0.42 : 0.35));
+    const hl = [];
+    for (let i = i0; i <= i1; i++) hl.push({ x: U.lerp(P[i].x, other[i].x, 0.25), y: U.lerp(P[i].y, other[i].y, 0.25) });
+    for (let i = i1; i >= i0; i--) hl.push({ x: U.lerp(P[i].x, other[i].x, 0.7), y: U.lerp(P[i].y, other[i].y, 0.7) });
+    SC.draw.fill(ctx, hi ? U.rgba(U.shade(color, 0.45), 0.75) : U.shade(color, 0.3), (q) => SC.draw.poly(q, hl));
+    ctx.restore();
+    if (hi && rig.line > 0) SC.draw.stroke(ctx, U.rgba(U.shade(color, -0.5), 0.5), rig.line * 0.5, (q) => SC.draw.poly(q, P.slice(Math.round(n * 0.3), n - 1), false));
+  }
+
+  // Proyecta y clasifica los mechones en visibles (delante) y ocultos (detrás).
+  function clumpSet(rig, Hd, st, id) {
+    const H = rig.head, hz = V.proj(rig, H.c).z, front = [], back = [];
+    for (const c of makeClumps(rig, st, id)) {
+      const pts = clumpPts(rig, Hd, c);
+      const P = pts.map((p) => V.proj(rig, p));
+      let zr = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const onHead = pts[i].y < H.c.y + H.h * 0.4;
+        zr += onHead ? P[i].z - hz : P[i].z - V.proj(rig, Vc.v(rig.pivot.x, pts[i].y, 0)).z;
+      }
+      // Se clasifica por la raíz: un mechón que nace detrás de la cabeza queda detrás.
+      const nr = Math.max(2, Math.round(pts.length * 0.35));
+      let zroot = 0;
+      for (let i = 0; i < nr; i++) zroot += P[i].z - hz;
+      zroot /= nr;
+      zr = c.l1 > 1 ? zroot : zr / pts.length;
+      const item = { P, z: zr, w: c.w * H.w * 0.5, kind: c.kind, root: c.root };
+      (zr > (c.l1 > 1.2 ? 0.2 : -0.12) * H.w ? front : back).push(item);
+    }
+    const ORDER = { back: 0, side: 1, crown: 2, bang: 3 };
+    front.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || a.z - b.z);
+    back.sort((a, b) => a.z - b.z);
+    return { front, back };
+  }
+
   for (const [id, st] of Object.entries(STYLES)) {
     const colors = { main: { label: 'Pelo', value: '#6b3f2a' } };
     if ((st.tails || []).some((t) => t.tie) || st.bun) colors.tie = { label: 'Lazo', value: '#e0445e' };
@@ -173,7 +325,7 @@
 
       hairShell(ctx, rig, c, Hd) {
         const H = rig.head, e = thickness(rig, st);
-        let vol = Hd.shell(e, 0, 1, { topFn: () => 0, botFn: bottomFn(st), n: rig.detail === 'high' ? 36 : 18, density: 16 });
+        let vol = Hd.shell(e, 0, 1, { topFn: () => 0, botFn: bottomFn(st, st.thin ? 0 : 0.12), n: rig.detail === 'high' ? 36 : 18, density: 16 });
         if (st.spikes) {
           const cones = st.spikes.map(([phi, level, len, r]) => {
             const { p, n } = surfN(rig, Hd, level, phi, 0);
@@ -191,7 +343,7 @@
           SC.draw.poly(ctx, cut);
           ctx.clip('evenodd');
         }
-        V.fill(ctx, rig, vol, c.main, { mat: 'hair', cast: 0.01 });
+        V.fill(ctx, rig, vol, st.thin ? c.main : U.shade(c.main, -0.12), { mat: 'hair', cast: 0.01 });
         if (cut && rig.line > 0) {
           // Contorno donde el pelo se encuentra con la cara.
           ctx.save();
@@ -199,58 +351,28 @@
           SC.draw.stroke(ctx, SC.draw.lineColor(rig, c.main), rig.line * 1.4, (q) => SC.draw.poly(q, cut));
           ctx.restore();
         }
-        if (rig.detail === 'high' && !st.thin) {
-          const hl = U.shade(c.main, 0.32), dk = U.rgba(U.shade(c.main, -0.45), 0.8);
-          // Brillo en anillo
-          for (let k = 0; k < 6; k++) {
-            const a = -1.15 + k * 0.33;
-            V.decal(ctx, rig, Hd.at, [[0.17, a, st.vol * H.w], [0.2, a + 0.22, st.vol * H.w], [0.25, a + 0.12, st.vol * H.w], [0.23, a - 0.02, st.vol * H.w]], { fill: hl, clip: vol, minVis: 0.6 });
-          }
-          // Mechones
-          const strands = st.swept ? [-2.2, -1.4, -0.7, 0, 0.7, 1.4, 2.2] : [-2.5, -1.8, -1.1, 1.1, 1.8, 2.5, PI];
-          for (const a of strands) {
-            V.dline(ctx, rig, Hd.at, V.curvePts(8, (t) => [U.lerp(0.04, st.swept ? 0.55 : bottomFn(st)(a) - 0.05, t), a + (st.swept ? 0.35 * t * Math.sign(a || 1) : 0.15 * t)]), dk, rig.line * 0.6, { clip: vol });
-          }
-        }
         ctx.restore();
       },
 
       hairFront(ctx, rig, c, Hd) {
-        const H = rig.head, e = st.vol * H.w;
-        if (st.bangs) {
-          const tips = st.bangs.map(([phi, l]) => [l, clampPhi(rig, phi), e * 0.75]);
-          const topEdge = st.bangs.slice().reverse().map(([phi]) => [st.hairline - 0.12, clampPhi(rig, phi * 0.95), e * 0.8]);
-          const poly = tips.concat(topEdge);
+        if (st.bangs && rig.detail === 'high') {
           // Sombra del flequillo sobre la frente
-          if (rig.detail === 'high') {
-            V.decal(ctx, rig, Hd.at, st.bangs.map(([phi, l]) => [l + 0.05, clampPhi(rig, phi), 0]).concat(topEdge.map(([l, p]) => [l, p, 0])),
-              { fill: U.rgba(U.shade(rig.skinColor, -0.5), 0.3), clip: Hd.skull, smooth: !!st.soft, minVis: 0.25 });
-          }
-          const P = V.project(rig, Hd.at, poly);
-          if (P.filter((p) => p.f > 0.02).length / P.length > 0.25) {
-            V.fill(ctx, rig, { polys: [P], rad: H.w * 0.25 }, c.main, { mat: 'hair', cast: 0.006 });
-            if (rig.detail === 'high') {
-              const dk = U.rgba(U.shade(c.main, -0.45), 0.8);
-              for (let i = 1; i < st.bangs.length - 1; i += 2) {
-                const [phi, l] = st.bangs[i];
-                V.dline(ctx, rig, Hd.at, V.curvePts(5, (t) => [U.lerp(st.hairline - 0.08, l - 0.03, t), clampPhi(rig, phi * U.lerp(0.9, 1, t)), e * 0.8]), dk, rig.line * 0.55);
-              }
-            }
-          }
+          const topEdge = st.bangs.slice().reverse().map(([phi]) => [st.hairline - 0.12, clampPhi(rig, phi * 0.95), 0]);
+          V.decal(ctx, rig, Hd.at, st.bangs.map(([phi, l]) => [l + 0.06, clampPhi(rig, phi), 0]).concat(topEdge),
+            { fill: U.rgba(U.shade(rig.skinColor, -0.5), 0.3), clip: Hd.skull, smooth: true, minVis: 0.25 });
         }
+        for (const cl of clumpSet(rig, Hd, st, id).front) drawClump(ctx, rig, cl.P, cl.w, c.main, cl.root);
       },
 
       items(rig, c, body) {
         const Hd = body.head, H = rig.head, e = st.vol * H.w, out = [];
         const hz = V.proj(rig, H.c).z;
         const zOf = (p, front) => (V.proj(rig, p).z - hz > (front ? -0.2 : 0.3) * H.w ? 1004 : -500);
+        const back = clumpSet(rig, Hd, st, id).back;
+        if (back.length) out.push({ z: -450, draw: (ctx) => { for (const cl of back) drawClump(ctx, rig, cl.P, cl.w, U.shade(c.main, -0.05), cl.root); } });
         if (st.sheet) {
           const vol = sheetVol(rig, Hd, st, e);
           out.push({ z: vol.z, draw: (ctx) => V.fill(ctx, rig, vol, U.shade(c.main, -0.06), { mat: 'hair', cast: 0.006 }) });
-        }
-        for (const lk of st.locks || []) {
-          const h = hangVol(rig, Hd, e * 0.6, { phi: lk.phi, level: st.hairline + 0.22, len: lk.len, r: lk.w * 1.5, w: true, front: true, spread: 0.12 });
-          out.push({ z: zOf(h.pts[4], true), draw: (ctx) => V.fill(ctx, rig, h.vol, c.main, { mat: 'hair', cast: 0.006 }) });
         }
         for (const t of st.tails || []) {
           const h = hangVol(rig, Hd, e, t);

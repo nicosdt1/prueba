@@ -133,10 +133,11 @@ SC.render = (() => {
   // Encuadre de "busto" (cabeza y hombros) para novela visual.
   function bustBox(ch) {
     const rig = SC.buildRig(ch, null);
-    const top = rig.head.c.y - rig.head.h * 0.85;
-    const bottom = rig.torso.at(rig.torso.L.underbust).c.y;
+    const top = rig.head.c.y - rig.head.h * 0.95;
+    const bottom = U.lerp(rig.torso.at(rig.torso.L.underbust).c.y, rig.torso.at(rig.torso.L.waist).c.y, 0.5);
     const h = bottom - top, w = h * 0.85;
-    return { x: rig.cx - w / 2, y: top, w, h };
+    const x = rig.cx + (rig.head.c.x + rig.pivot.x) / 2;
+    return { x: x - w / 2, y: top, w, h };
   }
 
   // Dibuja el personaje en un lienzo auxiliar y lo compone con un contorno
@@ -323,6 +324,106 @@ SC.render = (() => {
     return small;
   }
 
+  // Retrato pixel art (busto) para novelas visuales: a esta resolución la cara
+  // tiene sitio, así que se dibuja la ilustración completa a 4× (con líneas de
+  // ~1 píxel) y se reduce por color predominante, dando prioridad a los tonos
+  // oscuros (líneas, ojos). Después se limita la paleta y se añade el contorno.
+  function renderPixelPortrait(ch, pose, o = {}) {
+    const W = o.w || 128, H = o.h || 160, SS = 4;
+    const bb = bustBox(ch);
+    const k = (H * SS) / (bb.h * 1.08);
+    const cx = bb.x + bb.w / 2, cy = bb.y + bb.h / 2 + bb.h * 0.03;
+    const big = makeCanvas(W * SS, H * SS), c = big.getContext('2d');
+    c.setTransform(k, 0, 0, k, (W * SS) / 2 - cx * k, (H * SS) / 2 - cy * k);
+    drawCharacter(c, ch, pose, {
+      detail: 'high', line: (SS * 0.85) / k, lineMode: o.lineMode || 'colored',
+      expression: o.expression, view: o.view,
+    });
+    const src = c.getImageData(0, 0, W * SS, H * SS).data;
+    const out = new Uint8ClampedArray(W * H * 4);
+    const counts = new Map();
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        counts.clear();
+        let opaque = 0;
+        for (let yy = 0; yy < SS; yy++) for (let xx = 0; xx < SS; xx++) {
+          const i = ((y * SS + yy) * W * SS + (x * SS + xx)) * 4;
+          if (src[i + 3] < 110) continue;
+          opaque++;
+          const r = src[i], g = src[i + 1], b = src[i + 2];
+          const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+          const lum = (r * 0.3 + g * 0.59 + b * 0.11) / 255;
+          const wgt = 1 + (lum < 0.32 ? 1.4 : 0);
+          const e = counts.get(key);
+          if (e) e.n += wgt; else counts.set(key, { n: wgt, r, g, b });
+        }
+        if (opaque < SS * SS * 0.45) continue;
+        let best = null;
+        for (const e of counts.values()) if (!best || e.n > best.n) best = e;
+        const j = (y * W + x) * 4;
+        out[j] = best.r; out[j + 1] = best.g; out[j + 2] = best.b; out[j + 3] = 255;
+      }
+    }
+    limitPalette(out, o.colors || 40);
+    if (o.outline !== false) outlinePixels(out, W, H, o.lineMode === 'dark');
+    const cv = makeCanvas(W, H), cc = cv.getContext('2d'), img = cc.createImageData(W, H);
+    img.data.set(out);
+    cc.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  // Reduce la paleta: los colores poco usados se sustituyen por el más cercano de los frecuentes.
+  function limitPalette(px, max) {
+    const hist = new Map();
+    for (let j = 0; j < px.length; j += 4) {
+      if (!px[j + 3]) continue;
+      const key = (px[j] << 16) | (px[j + 1] << 8) | px[j + 2];
+      hist.set(key, (hist.get(key) || 0) + 1);
+    }
+    const sorted = [...hist.entries()].sort((a, b) => b[1] - a[1]);
+    if (sorted.length <= max) return;
+    const keep = [];
+    for (const [key] of sorted) {
+      const r = key >> 16, g = (key >> 8) & 255, b = key & 255;
+      if (keep.every((q) => Math.abs(q[0] - r) + Math.abs(q[1] - g) + Math.abs(q[2] - b) > 18)) keep.push([r, g, b]);
+      if (keep.length >= max) break;
+    }
+    const cache = new Map();
+    for (let j = 0; j < px.length; j += 4) {
+      if (!px[j + 3]) continue;
+      const key = (px[j] << 16) | (px[j + 1] << 8) | px[j + 2];
+      let m = cache.get(key);
+      if (!m) {
+        let bd = 1e9;
+        for (const q of keep) {
+          const d = (q[0] - px[j]) ** 2 * 0.3 + (q[1] - px[j + 1]) ** 2 * 0.59 + (q[2] - px[j + 2]) ** 2 * 0.11;
+          if (d < bd) { bd = d; m = q; }
+        }
+        cache.set(key, m);
+      }
+      px[j] = m[0]; px[j + 1] = m[1]; px[j + 2] = m[2];
+    }
+  }
+
+  function outlinePixels(px, W, H, dark) {
+    const copy = new Uint8ClampedArray(px);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const j = (y * W + x) * 4;
+        if (copy[j + 3]) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          const q = (ny * W + nx) * 4;
+          if (!copy[q + 3]) continue;
+          const col = dark ? U.hexToRgb('#1e1628') : U.hexToRgb(U.multiply(U.rgbToHex(copy[q], copy[q + 1], copy[q + 2]), '#4d3d5c'));
+          px[j] = col.r; px[j + 1] = col.g; px[j + 2] = col.b; px[j + 3] = 255;
+          break;
+        }
+      }
+    }
+  }
+
   // Ojos, boca y rubor colocados a mano sobre la rejilla de píxeles.
   function pixelFace(rig, ids, pid, W, H, mapX, mapY, hp, setPx) {
     const Hd = rig.bodyModel.head, F = rig.face, e = rig.expr;
@@ -372,10 +473,10 @@ SC.render = (() => {
     const frames = [];
     for (let i = 0; i < anim.frames; i++) {
       const pose = anim.pose(i, anim.frames);
-      frames.push(mode === 'pixel' ? renderPixel(ch, pose, o) : renderVN(ch, pose, o));
+      frames.push(mode === 'pixel' ? (o.portrait ? renderPixelPortrait(ch, pose, o) : renderPixel(ch, pose, o)) : renderVN(ch, pose, o));
     }
     return frames;
   }
 
-  return { makeCanvas, drawCharacter, vnDrawOpts, paintVN, renderVN, renderPixel, renderAnimation, bustBox };
+  return { makeCanvas, drawCharacter, vnDrawOpts, paintVN, renderVN, renderPixel, renderPixelPortrait, renderAnimation, bustBox };
 })();

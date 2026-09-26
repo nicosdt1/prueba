@@ -33,6 +33,14 @@ SC.defaultPose = () => ({
   legs: [SC.legPose(), SC.legPose()],
   blink: false, mouth: null,
 });
+// Pose de reposo natural (contrapposto): el peso cae sobre una pierna, la otra
+// se relaja con la rodilla flexionada, los hombros compensan la cadera y la
+// cabeza se ladea un poco. Evita el aspecto de maniquí rígido.
+SC.restPose = (o = {}) => Object.assign({
+  sway: 0.012, roll: -0.035, twist: 0.04, headTilt: 0.06, headYaw: -0.04, headNod: 0.03,
+  arms: [SC.armPose({ abd: 0.17, bend: 0.3, flex: 0.1 }), SC.armPose({ abd: 0.1, bend: 0.14, flex: -0.04 })],
+  legs: [SC.legPose({ flex: 0.08, knee: 0.2, abd: 0.07 }), SC.legPose({ flex: -0.02, knee: 0.02, abd: 0.02 })],
+}, o);
 // flex: balanceo adelante, abd: apertura lateral, bend: codo, hint: hacia dónde dobla, palm: orientación de la palma.
 SC.armPose = (o) => Object.assign({ flex: 0.04, abd: 0.12, bend: 0.14, hint: 'fwd', palm: 'in', fist: 0 }, o);
 SC.legPose = (o) => Object.assign({ flex: 0, abd: 0.03, knee: 0.03 }, o);
@@ -40,7 +48,7 @@ SC.legPose = (o) => Object.assign({ flex: 0, abd: 0.03, knee: 0.03 }, o);
 SC.buildRig = function buildRig(ch, pose, opts = {}) {
   const U = SC.util, Vc = SC.vec, M = SC.mat, V = SC.V;
   const b = Object.assign({}, SC.BODY_DEFAULTS, ch.body, opts.bodyOverride || {});
-  const P = Object.assign(SC.defaultPose(), pose || {});
+  const P = Object.assign(SC.defaultPose(), pose || SC.restPose());
   const fem = b.sex === 'f' ? 1 : 0;
   const mix = (m, f) => m + (f - m) * fem;
   const W = b.build, Mu = b.muscle;

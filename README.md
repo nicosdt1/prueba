@@ -6,6 +6,8 @@ Un mismo personaje se puede exportar de dos formas:
 
 - **Novela visual**: ilustración detallada con volumen y sombreado, anatomía completa, 9+ expresiones,
   vistas de frente, 3/4, perfil y espalda, hasta 1800 × 3000 px, cuerpo completo o busto.
+- **Retrato pixel art**: bustos de 96×120 a 200×250 para novelas visuales en pixel art, con
+  pack de expresiones para Ren'Py.
 - **Juego (pixel art)**: sprites de baja resolución (de 32×32 a 96×128) con menos detalle,
   proporciones chibi opcionales, contorno exterior y animaciones en **4 direcciones**
   (abajo, izquierda, derecha, arriba) listas en hojas de sprites.
@@ -117,6 +119,11 @@ js/
   cabeza sobre el cuello, mangas sobre los brazos, falda sobre las piernas). La piel lleva rubor
   cálido en mejillas, rodillas y codos, y el contorno exterior es más grueso que las líneas
   interiores, como en una ilustración.
+- **Pelo por mechones.** Cada peinado se construye con decenas de mechones (flequillo,
+  coronilla, laterales y nuca) que nacen en el cuero cabelludo, siguen la cabeza, caen por
+  gravedad sin atravesar el cuerpo y acaban en punta, cada uno con su sombra y su brillo.
+- **Pose natural.** Por defecto el personaje está en contrapposto (peso en una pierna, hombros
+  compensados, cabeza ladeada) en lugar de rígido.
 - **Pixel art.** Se hace un pase de identificadores (cada pieza con un color único) y un pase de
   color con sombreado en 3 tonos a 4×; al reducir se elige la pieza dominante de cada bloque.
   Después se eliminan píxeles sueltos, se colocan ojos y boca píxel a píxel y se trazan contornos
