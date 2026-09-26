@@ -107,9 +107,16 @@ SC.exporter = (() => {
     return out;
   }
 
-  // Hoja de sprites: una fila por animación. Devuelve { canvas, meta }.
-  function spritesheet(ch, animIds, mode, o, name) {
-    const rows = animIds.map((id) => ({ anim: SC.ANIMS[id], frames: SC.render.renderAnimation(ch, id, mode, o) }));
+  // Hoja de sprites: una fila por animación (y por dirección). Devuelve { canvas, meta }.
+  // dirs: [{ view: 'front', dir: 'abajo' }, ...]
+  function spritesheet(ch, animIds, mode, o, name, dirs) {
+    const D = dirs && dirs.length ? dirs : [{ view: o.view || 'front', dir: null }];
+    const rows = [];
+    for (const id of animIds) {
+      for (const d of D) {
+        rows.push({ anim: SC.ANIMS[id], key: d.dir ? `${id}_${d.dir}` : id, frames: SC.render.renderAnimation(ch, id, mode, Object.assign({}, o, { view: d.view })) });
+      }
+    }
     const fw = rows[0].frames[0].width, fh = rows[0].frames[0].height;
     const cols = Math.max(...rows.map((r) => r.frames.length));
     const sheet = SC.render.makeCanvas(fw * cols, fh * rows.length);
@@ -117,7 +124,7 @@ SC.exporter = (() => {
     const animations = {};
     rows.forEach((r, y) => {
       r.frames.forEach((f, x) => ctx.drawImage(f, x * fw, y * fh));
-      animations[r.anim.id] = { row: y, frames: r.frames.length, fps: r.anim.fps, loop: r.anim.id !== 'attack' && r.anim.id !== 'jump' };
+      animations[r.key] = { row: y, frames: r.frames.length, fps: r.anim.fps, loop: r.anim.id !== 'attack' && r.anim.id !== 'jump' };
     });
     const meta = {
       generator: 'Forja de Sprites',

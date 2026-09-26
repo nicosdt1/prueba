@@ -1,55 +1,58 @@
-// Animaciones: cada una genera una pose por fotograma. Las poses sólo mueven
-// el esqueleto, así que cualquier combinación de ropa se anima sola.
+// Animaciones: cada una genera una pose 3D por fotograma. Como sólo mueven el
+// esqueleto, cualquier combinación de ropa se anima sola y en cualquier vista
+// (en perfil se ve el paso completo; de frente, el levantamiento de rodillas).
 SC.ANIMS = (() => {
   const TAU = Math.PI * 2;
-  const arms = (l, r) => [Object.assign({ a: 0.07, e: -0.04 }, l), Object.assign({ a: 0.07, e: -0.04 }, r)];
-  const legs = (l, r) => [Object.assign({ lift: 0, spread: 0 }, l), Object.assign({ lift: 0, spread: 0 }, r)];
+  const arm = SC.armPose, leg = SC.legPose;
+  const pos = (x) => Math.max(0, x);
 
   const list = [
     {
       id: 'idle', name: 'Reposo', frames: 4, fps: 4,
       pose(i, n) {
         const br = (1 - Math.cos((i / n) * TAU)) / 2;
-        return { breathe: br, bob: br * 0.004, arms: arms({ a: 0.07 + br * 0.03 }, { a: 0.07 + br * 0.03 }) };
-      },
-    },
-    {
-      id: 'walk', name: 'Caminar', frames: 4, fps: 7,
-      pose(i, n) {
-        const ph = (i / n) * TAU, s = Math.sin(ph);
         return {
-          bob: -Math.abs(s) * 0.012 + 0.006,
-          sway: -s * 0.008,
-          headTilt: s * 0.02,
-          legs: legs({ lift: Math.max(0, s) }, { lift: Math.max(0, -s) }),
-          arms: arms({ a: 0.1 + s * 0.08, e: -0.06 - Math.max(0, -s) * 0.22 },
-                     { a: 0.1 - s * 0.08, e: -0.06 - Math.max(0, s) * 0.22 }),
+          breathe: br, sway: br * 0.004, headTilt: br * 0.015,
+          arms: [arm({ abd: 0.12 + br * 0.02 }), arm({ abd: 0.12 + br * 0.02 })],
         };
       },
     },
     {
-      id: 'run', name: 'Correr', frames: 6, fps: 12,
+      id: 'walk', name: 'Caminar', frames: 8, fps: 10,
       pose(i, n) {
         const ph = (i / n) * TAU, s = Math.sin(ph);
+        const L = (p) => leg({ flex: 0.42 * Math.sin(p), knee: 0.08 + 0.95 * Math.pow(pos(Math.cos(p)), 1.6) });
         return {
-          bob: -Math.abs(s) * 0.03 + 0.012,
-          sway: -s * 0.012,
-          headTilt: s * 0.03,
-          legs: legs({ lift: Math.max(0, s) * 1.6 }, { lift: Math.max(0, -s) * 1.6 }),
-          arms: arms({ a: 0.35 + s * 0.2, e: -1.1 }, { a: 0.35 - s * 0.2, e: -1.1 }),
+          twist: 0.07 * s, pitch: 0.03, sway: -0.006 * Math.cos(ph), headYaw: -0.04 * s,
+          legs: [L(ph), L(ph + Math.PI)],
+          arms: [arm({ flex: -0.32 * s, bend: 0.2 + 0.25 * pos(-s), abd: 0.1 }), arm({ flex: 0.32 * s, bend: 0.2 + 0.25 * pos(s), abd: 0.1 })],
+        };
+      },
+    },
+    {
+      id: 'run', name: 'Correr', frames: 8, fps: 14,
+      pose(i, n) {
+        const ph = (i / n) * TAU, s = Math.sin(ph);
+        const L = (p) => leg({ flex: 0.1 + 0.7 * Math.sin(p), knee: 0.3 + 1.5 * Math.pow(pos(Math.cos(p)), 1.1) });
+        return {
+          twist: 0.14 * s, pitch: 0.14, jump: 0.012 * Math.abs(Math.cos(ph)),
+          legs: [L(ph), L(ph + Math.PI)],
+          arms: [arm({ flex: -0.7 * s, bend: 1.45, abd: 0.15, fist: 1 }), arm({ flex: 0.7 * s, bend: 1.45, abd: 0.15, fist: 1 })],
         };
       },
     },
     {
       id: 'jump', name: 'Saltar', frames: 6, fps: 10,
       pose(i) {
+        const up = (abd, bend = 0.3) => [arm({ abd, bend, hint: 'up' }), arm({ abd, bend, hint: 'up' })];
+        const tuck = (f, k) => [leg({ flex: f, knee: k }), leg({ flex: f, knee: k })];
         const seq = [
-          { crouch: 0.5, arms: arms({ a: 0.35, e: -0.2 }, { a: 0.35, e: -0.2 }) },
-          { jump: 0.04, arms: arms({ a: 1.6, e: 0.3 }, { a: 1.6, e: 0.3 }), legs: legs({ lift: 0.4 }, { lift: 0.4 }) },
-          { jump: 0.08, arms: arms({ a: 2.2, e: 0.4 }, { a: 2.2, e: 0.4 }), legs: legs({ lift: 0.8 }, { lift: 0.8 }) },
-          { jump: 0.06, arms: arms({ a: 1.8, e: 0.3 }, { a: 1.8, e: 0.3 }), legs: legs({ lift: 0.5 }, { lift: 0.5 }) },
-          { jump: 0.02, arms: arms({ a: 0.9, e: 0 }, { a: 0.9, e: 0 }) },
-          { crouch: 0.35, arms: arms({ a: 0.4, e: -0.2 }, { a: 0.4, e: -0.2 }) },
+          { crouch: 0.45, pitch: 0.12, arms: [arm({ flex: -0.5, bend: 0.3 }), arm({ flex: -0.5, bend: 0.3 })] },
+          { jump: 0.04, arms: up(1.5), legs: tuck(0.2, 0.3) },
+          { jump: 0.09, arms: up(2.3, 0.4), legs: tuck(0.5, 1.0) },
+          { jump: 0.07, arms: up(1.9), legs: tuck(0.35, 0.6) },
+          { jump: 0.02, arms: up(0.9, 0.2), legs: tuck(0.1, 0.2) },
+          { crouch: 0.3, pitch: 0.08, arms: [arm({ abd: 0.4 }), arm({ abd: 0.4 })] },
         ];
         return seq[i];
       },
@@ -58,24 +61,25 @@ SC.ANIMS = (() => {
       id: 'wave', name: 'Saludar', frames: 6, fps: 8,
       pose(i, n) {
         const w = Math.sin((i / n) * TAU);
-        return { headTilt: -0.04, arms: arms({}, { a: 2.35, e: 0.55 + w * 0.35 }) };
+        return { headTilt: -0.05, roll: -0.02, arms: [arm(), arm({ abd: 2.3, bend: 0.55 + w * 0.35, hint: 'up', palm: 'fwd' })] };
       },
     },
     {
-      id: 'attack', name: 'Atacar', frames: 4, fps: 10,
+      id: 'attack', name: 'Atacar', frames: 5, fps: 12,
       pose(i) {
         const seq = [
-          { lean: -0.05, arms: arms({}, { a: 2.6, e: 0.3 }) },
-          { lean: 0.02, arms: arms({}, { a: 1.9, e: 0.1 }) },
-          { lean: 0.08, crouch: 0.2, arms: arms({ a: 0.3 }, { a: 0.6, e: -0.2 }) },
-          { lean: 0.03, arms: arms({}, { a: 0.3, e: -0.1 }) },
+          { twist: -0.25, pitch: -0.04, arms: [arm({ flex: 0.3 }), arm({ flex: 2.7, bend: 0.4, fist: 1 })], legs: [leg({ flex: 0.25, knee: 0.3 }), leg({ flex: -0.2, knee: 0.1 })] },
+          { twist: -0.1, pitch: 0.04, arms: [arm({ flex: 0.1 }), arm({ flex: 2.0, bend: 0.2, fist: 1 })], legs: [leg({ flex: 0.3, knee: 0.35 }), leg({ flex: -0.25, knee: 0.1 })] },
+          { twist: 0.25, pitch: 0.15, crouch: 0.15, arms: [arm({ flex: -0.4, bend: 0.4 }), arm({ flex: 0.9, bend: 0.1, fist: 1 })], legs: [leg({ flex: 0.4, knee: 0.5 }), leg({ flex: -0.3, knee: 0.1 })] },
+          { twist: 0.3, pitch: 0.17, crouch: 0.15, arms: [arm({ flex: -0.45, bend: 0.4 }), arm({ flex: 0.5, bend: 0.1, fist: 1 })], legs: [leg({ flex: 0.4, knee: 0.5 }), leg({ flex: -0.3, knee: 0.1 })] },
+          { twist: 0.1, pitch: 0.05, arms: [arm(), arm({ flex: 0.2, bend: 0.2, fist: 1 })] },
         ];
         return seq[i];
       },
     },
     {
       id: 'talk', name: 'Hablar', frames: 4, fps: 8,
-      pose(i) { return { mouth: ['talkA', 'talkB', 'talkA', null][i], breathe: i % 2 ? 0.3 : 0 }; },
+      pose(i) { return { mouth: ['talkA', 'talkB', 'talkA', null][i], breathe: i % 2 ? 0.3 : 0, headNod: i % 2 ? 0.02 : 0 }; },
     },
     {
       id: 'blink', name: 'Parpadear', frames: 4, fps: 6,

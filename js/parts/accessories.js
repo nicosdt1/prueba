@@ -1,191 +1,184 @@
-// Accesorios de cabeza, cara, cuello y espalda.
+// Accesorios de cabeza, cara, cuello y espalda (todos en 3D).
 (() => {
-  const U = SC.util, D = SC.draw;
+  const U = SC.util, Vc = SC.vec, V = SC.V, D = SC.draw;
+  const PI = Math.PI;
   const reg = (d) => SC.registerPart(d);
-  const R = (rig) => ({ rx: rig.head.w / 2, ry: rig.head.h / 2 });
+  const fill = (ctx, rig, vol, color, o) => V.fill(ctx, rig, vol, color, Object.assign({ shadeK: 0.3 }, o));
+  const hairOut = (rig) => {
+    const h = rig.equipped.find((p) => p.slot === 'hair');
+    return rig.head.w * (h ? 0.16 : 0.02);
+  };
+  // Punto en coordenadas locales de la cabeza (x: ancho, y: alto, z: fondo).
+  const HL = (rig, x, y, z) => rig.head.x(Vc.v(x * rig.head.w, y * rig.head.h, z * rig.head.d));
 
-  // ---------- Cabeza (coordenadas locales de la cabeza) ----------
+  // ---------- Cabeza ----------
   reg({
     slot: 'headAcc', id: 'gorra', name: 'Gorra',
     colors: { main: { label: 'Tela', value: '#d94141' }, visor: { label: 'Visera', value: '#f2f2f2' } },
-    layers: {
-      headAcc(ctx, rig, c) {
-        const { rx, ry } = R(rig);
-        D.shape(ctx, rig, c.main, (q) => {
-          q.moveTo(-rx * 1.14, -ry * 0.3);
-          q.bezierCurveTo(-rx * 1.18, -ry * 1.45, rx * 1.18, -ry * 1.45, rx * 1.14, -ry * 0.3);
-          q.quadraticCurveTo(0, -ry * 0.45, -rx * 1.14, -ry * 0.3);
-        }, { shade: (q) => q.rect(rx * 0.4, -ry * 2, rx * 2, ry * 3), light: (q) => D.ellipse(q, -rx * 0.45, -ry * 0.95, rx * 0.25, ry * 0.1, -0.4) });
-        D.shape(ctx, rig, c.visor, (q) => {
-          q.moveTo(-rx * 1.1, -ry * 0.32);
-          q.quadraticCurveTo(0, -ry * 0.48, rx * 1.1, -ry * 0.32);
-          q.quadraticCurveTo(rx * 1.2, -ry * 0.12, 0, -ry * 0.1);
-          q.quadraticCurveTo(-rx * 1.2, -ry * 0.12, -rx * 1.1, -ry * 0.32);
-        });
-        D.shape(ctx, rig, c.main, (q) => D.ellipse(q, 0, -ry * 1.16, rx * 0.12, ry * 0.06));
-      },
+    hat(ctx, rig, c, Hd) {
+      const e = hairOut(rig) * 1.2;
+      const cap = Hd.shell(e, 0, 0.36, { topFn: () => 0, botFn: (p) => 0.3 + 0.08 * (1 - Math.cos(p)) / 2, n: 20 });
+      fill(ctx, rig, cap, c.main);
+      const arc = [], arcOut = [];
+      for (let i = 0; i <= 10; i++) {
+        const phi = U.lerp(-1.15, 1.15, i / 10), s = Hd.at(0.3), p = V.surf(s, phi, e);
+        arc.push(p);
+        arcOut.push(Vc.add(V.surf(s, phi * 0.85, e + rig.head.w * 0.55 * Math.cos(phi * 0.9)), rig.head.dirTo(Vc.v(0, rig.head.h * 0.06, 0))));
+      }
+      fill(ctx, rig, V.fromRings(rig, [arc, arcOut], rig.head.w * 0.2), c.visor, { shadeK: 0.4 });
+      fill(ctx, rig, V.tube(rig, [V.surf(Hd.at(0), 0, e * 0.8), V.surf(Hd.at(0), 0, e * 1.3)], rig.head.w * 0.08, 1, 8), c.main);
     },
   });
 
   reg({
     slot: 'headAcc', id: 'bruja', name: 'Sombrero de mago',
     colors: { main: { label: 'Tela', value: '#3a2b63' }, band: { label: 'Cinta', value: '#e0b042' } },
-    layers: {
-      headAcc(ctx, rig, c) {
-        const { rx, ry } = R(rig);
-        D.shape(ctx, rig, c.main, (q) => D.ellipse(q, 0, -ry * 0.62, rx * 1.95, ry * 0.3), { shade: (q) => q.rect(-rx * 3, -ry * 0.62, rx * 6, ry) });
-        D.shape(ctx, rig, c.main, (q) => {
-          q.moveTo(-rx * 0.95, -ry * 0.66);
-          q.quadraticCurveTo(-rx * 0.5, -ry * 1.8, rx * 0.2, -ry * 2.5);
-          q.quadraticCurveTo(rx * 0.6, -ry * 2.75, rx * 1.2, -ry * 2.35);
-          q.quadraticCurveTo(rx * 0.55, -ry * 2.3, rx * 0.55, -ry * 1.9);
-          q.quadraticCurveTo(rx * 0.9, -ry * 1.1, rx * 0.95, -ry * 0.66);
-          q.quadraticCurveTo(0, -ry * 0.5, -rx * 0.95, -ry * 0.66);
-        }, { shade: (q) => q.rect(rx * 0.3, -ry * 3, rx * 2, ry * 3) });
-        D.limb(ctx, rig, [{ x: -rx * 0.9, y: -ry * 0.82 }, { x: 0, y: -ry * 0.74 }, { x: rx * 0.9, y: -ry * 0.82 }], ry * 0.16, c.band, { cap: 'butt', shade: false });
-      },
+    hat(ctx, rig, c) {
+      const H = rig.head, n = 24, ring = (y, r, dz = 0) => Array.from({ length: n }, (_, k) => {
+        const a = (k / n) * 2 * PI;
+        return HL(rig, Math.cos(a) * r, y, Math.sin(a) * r * 0.95 + dz);
+      });
+      fill(ctx, rig, V.fromRings(rig, [ring(-0.3, 2.05), ring(-0.33, 1.9)], H.w), c.main, { shadeK: 0.15 });
+      const secs = [];
+      for (let i = 0; i <= 8; i++) {
+        const k = i / 8, r = U.lerp(1.08, 0.04, Math.pow(k, 0.85));
+        const bend = Math.pow(k, 2.2);
+        secs.push(V.sec(HL(rig, bend * 0.9, -0.34 - k * 1.7 + bend * 0.25, -bend * 0.6), H.dirTo(Vc.v(1, 0, 0)), H.dirTo(Vc.v(0, 0, 1)), r * H.w, r * H.w, r * H.d * 0.9, r * H.d * 0.9));
+      }
+      fill(ctx, rig, V.fromSections(rig, secs, 16), c.main, { shadeK: 0.3 });
+      fill(ctx, rig, V.fromSections(rig, secs.slice(0, 2).map((s, i) => Object.assign({}, s, { a: s.a * 1.03, a2: s.a2 * 1.03, b: s.b * 1.03, b2: s.b2 * 1.03, c: i ? Vc.lerp(secs[0].c, secs[1].c, 0.6) : s.c })), 16), c.band, { shadeK: 0.2 });
     },
   });
 
   reg({
     slot: 'headAcc', id: 'lazo', name: 'Lazo grande',
     colors: { main: { label: 'Lazo', value: '#e2465f' } },
-    layers: {
-      headAcc(ctx, rig, c) {
-        const { rx, ry } = R(rig);
-        ctx.save();
-        ctx.translate(rx * 0.6, -ry * 0.88);
-        ctx.rotate(0.35);
-        const r = rx * 0.32;
+    hat(ctx, rig, c, Hd) {
+      const f = SC.face.frame(rig, Hd, 0.14, 0.95, hairOut(rig));
+      if (f.facing < -0.25) return;
+      const r = rig.head.w * 0.34, line = D.lineColor(rig, c.main);
+      SC.face.withFrame(ctx, f, 1, () => {
+        ctx.rotate(0.35 * f.dir);
         for (const s of [-1, 1]) {
-          D.shape(ctx, rig, c.main, (q) => {
-            q.moveTo(0, 0);
-            q.bezierCurveTo(s * r * 1.2, -r * 1.3, s * r * 2, -r * 0.5, s * r * 1.6, r * 0.2);
-            q.quadraticCurveTo(s * r * 1.2, r * 0.8, 0, 0);
-          }, { shade: (q) => D.ellipse(q, s * r * 1.2, r * 0.3, r * 0.6, r * 0.35) });
+          D.fill(ctx, c.main, (q) => { q.moveTo(0, 0); q.bezierCurveTo(s * r * 1.2, -r * 1.3, s * r * 2, -r * 0.5, s * r * 1.6, r * 0.2); q.quadraticCurveTo(s * r * 1.2, r * 0.8, 0, 0); });
+          ctx.lineWidth = rig.line; ctx.strokeStyle = line; ctx.stroke();
+          D.fill(ctx, U.shade(c.main, -0.18), (q) => D.ellipse(q, s * r * 1.15, r * 0.25, r * 0.45, r * 0.25));
+          D.fill(ctx, c.main, (q) => { q.moveTo(0, 0); q.lineTo(s * r * 0.7, r * 1.4); q.lineTo(s * r * 0.2, r * 1.3); q.closePath(); });
+          ctx.stroke();
         }
-        D.shape(ctx, rig, U.shade(c.main, -0.1), (q) => D.ellipse(q, 0, 0, r * 0.35, r * 0.4));
-        ctx.restore();
-      },
+        D.fill(ctx, U.shade(c.main, -0.1), (q) => D.ellipse(q, 0, 0, r * 0.35, r * 0.4));
+        ctx.stroke();
+      });
     },
   });
 
   reg({
     slot: 'headAcc', id: 'gato', name: 'Orejas de gato',
     colors: { main: { label: 'Pelaje', value: '#3b2c2a' }, inner: { label: 'Interior', value: '#f3a3b5' } },
-    layers: {
-      headAcc(ctx, rig, c) {
-        const { rx, ry } = R(rig);
-        for (const s of [-1, 1]) {
-          const bx = s * rx * 0.62, by = -ry * 0.82;
-          const tri = (k) => (q) => {
-            q.moveTo(bx - s * rx * 0.36 * k, by + ry * 0.12 * k);
-            q.quadraticCurveTo(bx + s * rx * 0.05, by - ry * 0.7 * k, bx + s * rx * 0.36 * k, by - ry * 0.55 * k);
-            q.quadraticCurveTo(bx + s * rx * 0.35 * k, by - ry * 0.1, bx + s * rx * 0.28 * k, by + ry * 0.2 * k);
-          };
-          D.shape(ctx, rig, c.main, tri(1));
-          D.shape(ctx, rig, c.inner, tri(0.6), { stroke: false });
-        }
-      },
+    hat(ctx, rig, c, Hd) {
+      const e = hairOut(rig);
+      for (const s of [-1, 1]) {
+        const s0 = Hd.at(0.1), p = V.surf(s0, s * 0.8, e * 0.6);
+        const tip = Vc.add(p, rig.head.dirTo(Vc.v(s * rig.head.w * 0.18, -rig.head.h * 0.3, -rig.head.d * 0.05)));
+        const secs = [0, 0.5, 1].map((k) => V.sec(Vc.lerp(p, tip, k), rig.head.dirTo(Vc.v(1, 0, 0)), rig.head.dirTo(Vc.v(0, 0, 1)),
+          rig.head.w * 0.3 * (1 - k * 0.95), rig.head.w * 0.3 * (1 - k * 0.95), rig.head.w * 0.1 * (1 - k * 0.9), rig.head.w * 0.1 * (1 - k * 0.9)));
+        fill(ctx, rig, V.fromSections(rig, secs, 10), c.main);
+        const inner = secs.map((q) => Object.assign({}, q, { c: Vc.add(q.c, rig.head.dirTo(Vc.v(0, q.a * 0.25, q.b * 0.9))), a: q.a * 0.55, a2: q.a2 * 0.55, b: q.b * 0.3, b2: q.b2 * 0.3 }));
+        if (V.proj(rig, rig.head.dirTo(Vc.v(0, 0, 1))).z - V.proj(rig, Vc.v(0, 0, 0)).z > -0.2) fill(ctx, rig, V.fromSections(rig, inner.slice(0, 2), 10), c.inner, { outline: false, shade: false });
+      }
     },
   });
 
   reg({
     slot: 'headAcc', id: 'corona', name: 'Corona',
     colors: { main: { label: 'Oro', value: '#e8b93a' }, gem: { label: 'Gemas', value: '#d8324c' } },
-    layers: {
-      headAcc(ctx, rig, c) {
-        const { rx, ry } = R(rig);
-        const y0 = -ry * 0.78, y1 = -ry * 1.35, w = rx * 0.75;
-        D.shape(ctx, rig, c.main, (q) => {
-          q.moveTo(-w, y0);
-          const n = 5;
-          for (let i = 0; i <= n * 2; i++) {
-            const x = -w + (2 * w * i) / (n * 2);
-            q.lineTo(x, i % 2 ? y1 + ry * 0.25 : y1);
-          }
-          q.lineTo(w, y0);
-          q.quadraticCurveTo(0, y0 + ry * 0.12, -w, y0);
-        }, { light: (q) => q.rect(-w, y0 - ry * 0.18, w * 2, ry * 0.06) });
-        for (const x of [-0.5, 0, 0.5]) {
-          D.shape(ctx, rig, c.gem, (q) => D.ellipse(q, x * w, y0 - ry * 0.1, rx * 0.07, rx * 0.07), { lineScale: 0.6 });
-        }
-      },
+    hat(ctx, rig, c, Hd) {
+      const e = hairOut(rig) * 1.1, H = rig.head;
+      const band = Hd.shell(e, 0.13, 0.2, { n: 24 });
+      const spikes = [];
+      for (let k = 0; k < 10; k++) {
+        const phi = (k / 10) * 2 * PI, p = V.surf(Hd.at(0.13), phi, e);
+        spikes.push(V.tube(rig, [p, Vc.add(p, H.dirTo(Vc.v(0, -H.h * 0.16, 0)))], (t) => H.w * 0.1 * (1 - t * 0.85), 0.5, 8));
+      }
+      fill(ctx, rig, V.merge(band, ...spikes), c.main, { shadeK: 0.4, shadeAmt: 0.25 });
+      for (const phi of [-0.6, 0, 0.6]) V.decal(ctx, rig, Hd.at, V.curvePts(8, (t) => [0.165 + 0.018 * Math.sin(t * 2 * PI), phi + 0.07 * Math.cos(t * 2 * PI), e * 1.1]), { fill: c.gem, minVis: 0.9 });
     },
   });
 
   reg({
     slot: 'headAcc', id: 'diadema', name: 'Diadema',
     colors: { main: { label: 'Diadema', value: '#f0f0f5' } },
-    layers: {
-      headAcc(ctx, rig, c) {
-        const { rx, ry } = R(rig);
-        const pts = [];
-        for (let i = 0; i <= 12; i++) {
-          const a = Math.PI * (1.08 + (0.84 * i) / 12);
-          pts.push({ x: Math.cos(a) * rx * 1.08, y: -ry * 0.15 + Math.sin(a) * ry * 0.98 });
-        }
-        D.limb(ctx, rig, pts, ry * 0.1, c.main, { shade: false });
-      },
+    hat(ctx, rig, c) {
+      const pts = [];
+      for (let i = 0; i <= 14; i++) {
+        const a = PI * (0.02 + (0.96 * i) / 14);
+        pts.push(HL(rig, -Math.cos(a) * 1.06, -0.1 - Math.sin(a) * 0.5, 0.08));
+      }
+      fill(ctx, rig, V.tube(rig, pts, rig.head.w * 0.065, 1, 8), c.main);
     },
   });
 
   // ---------- Cara ----------
+  function lensFrames(rig, Hd) {
+    const F = rig.face;
+    return [-1, 1].map((s) => ({ s, f: SC.face.frame(rig, Hd, F.eye, s * F.eyePhi, rig.head.w * 0.08) }));
+  }
+  function temples(ctx, rig, Hd, color, w) {
+    const F = rig.face;
+    for (const s of [-1, 1]) {
+      const a = V.surf(Hd.at(F.eye - 0.02), s * (F.eyePhi + 0.55), rig.head.w * 0.08), b = V.surf(Hd.at(F.eye + 0.02), s * 1.75, rig.head.w * 0.03);
+      const pa = V.proj(rig, a), pb = V.proj(rig, b);
+      if (V.facing(rig, Hd.at(F.eye), b) > -0.1) D.stroke(ctx, color, w, (q) => { q.moveTo(pa.x, pa.y); q.lineTo(pb.x, pb.y); });
+    }
+  }
   reg({
     slot: 'faceAcc', id: 'gafas', name: 'Gafas',
     colors: { main: { label: 'Montura', value: '#3a2e4a' } },
-    layers: {
-      faceAcc(ctx, rig, c) {
-        const m = SC.faceMetrics(rig);
-        const r = m.ew * 1.25;
-        ctx.save();
-        ctx.fillStyle = 'rgba(200,225,255,0.18)';
-        for (const s of [-1, 1]) { ctx.beginPath(); D.ellipse(ctx, s * m.eyeDX, m.eyeY, r, r * 0.9); ctx.fill(); }
-        ctx.restore();
-        D.detailLine(ctx, rig, c.main, (q) => {
-          for (const s of [-1, 1]) { q.moveTo(s * m.eyeDX + r, m.eyeY); D.ellipse(q, s * m.eyeDX, m.eyeY, r, r * 0.9); }
-          q.moveTo(-m.eyeDX + r, m.eyeY - r * 0.2);
-          q.quadraticCurveTo(0, m.eyeY - r * 0.5, m.eyeDX - r, m.eyeY - r * 0.2);
-        }, rig.detail === 'high' ? 1.2 : 1, true);
-      },
+    glasses(ctx, rig, c, Hd) {
+      const r = rig.head.w * 0.3, w = rig.line * (rig.detail === 'high' ? 1.2 : 1);
+      temples(ctx, rig, Hd, c.main, w);
+      const L = lensFrames(rig, Hd);
+      for (const { s, f } of L) {
+        if (f.facing < 0) continue;
+        SC.face.withFrame(ctx, f, s, () => {
+          D.fill(ctx, 'rgba(200,225,255,0.18)', (q) => D.ellipse(q, 0, 0, r, r * 0.85));
+          D.stroke(ctx, c.main, w, (q) => D.ellipse(q, 0, 0, r, r * 0.85));
+        });
+      }
+      if (L[0].f.facing > 0 && L[1].f.facing > 0) {
+        const a = L[0].f, b = L[1].f;
+        D.stroke(ctx, c.main, w, (q) => { q.moveTo(a.x + (b.x - a.x) * 0.3, a.y - r * 0.2); q.quadraticCurveTo((a.x + b.x) / 2, (a.y + b.y) / 2 - r * 0.45, b.x - (b.x - a.x) * 0.3, b.y - r * 0.2); });
+      }
     },
   });
-
   reg({
     slot: 'faceAcc', id: 'gafasSol', name: 'Gafas de sol',
     colors: { main: { label: 'Cristal', value: '#1d1b26' } },
-    layers: {
-      faceAcc(ctx, rig, c) {
-        const m = SC.faceMetrics(rig);
-        const r = m.ew * 1.3;
-        for (const s of [-1, 1]) {
-          D.shape(ctx, rig, c.main, (q) => {
-            const x = s * m.eyeDX;
-            q.moveTo(x - r, m.eyeY - r * 0.55);
-            q.lineTo(x + r, m.eyeY - r * 0.55);
-            q.quadraticCurveTo(x + r, m.eyeY + r * 0.8, x, m.eyeY + r * 0.75);
-            q.quadraticCurveTo(x - r, m.eyeY + r * 0.8, x - r, m.eyeY - r * 0.55);
-          }, { light: (q) => D.ellipse(q, s * m.eyeDX - r * 0.4, m.eyeY - r * 0.2, r * 0.25, r * 0.12, -0.5) });
-        }
-        D.detailLine(ctx, rig, c.main, (q) => { q.moveTo(-m.eyeDX + r, m.eyeY - r * 0.4); q.lineTo(m.eyeDX - r, m.eyeY - r * 0.4); }, 1.5, true);
-      },
+    glasses(ctx, rig, c, Hd) {
+      const r = rig.head.w * 0.32;
+      temples(ctx, rig, Hd, c.main, rig.line * 1.4);
+      const L = lensFrames(rig, Hd);
+      for (const { s, f } of L) {
+        if (f.facing < 0) continue;
+        SC.face.withFrame(ctx, f, s, () => {
+          D.fill(ctx, c.main, (q) => { q.moveTo(-r, -r * 0.5); q.lineTo(r, -r * 0.55); q.quadraticCurveTo(r, r * 0.8, 0, r * 0.75); q.quadraticCurveTo(-r, r * 0.8, -r, -r * 0.5); });
+          D.fill(ctx, 'rgba(255,255,255,0.35)', (q) => D.ellipse(q, -r * 0.35, -r * 0.15, r * 0.25, r * 0.1, -0.5));
+        });
+      }
+      if (L[0].f.facing > 0 && L[1].f.facing > 0) D.stroke(ctx, c.main, rig.line * 1.4, (q) => { q.moveTo(L[0].f.x, L[0].f.y - r * 0.4); q.lineTo(L[1].f.x, L[1].f.y - r * 0.4); });
     },
   });
-
   reg({
     slot: 'faceAcc', id: 'parche', name: 'Parche',
     colors: { main: { label: 'Parche', value: '#222026' } },
-    layers: {
-      faceAcc(ctx, rig, c) {
-        const m = SC.faceMetrics(rig);
-        const { rx, ry } = R(rig);
-        const x = m.eyeDX, r = m.ew * 1.3;
-        D.detailLine(ctx, rig, c.main, (q) => {
-          q.moveTo(-rx * 1.02, -ry * 0.3); q.lineTo(x, m.eyeY - r * 0.4);
-          q.moveTo(x, m.eyeY); q.lineTo(rx * 1.02, m.eyeY - ry * 0.05);
-        }, 1.4, true);
-        D.shape(ctx, rig, c.main, (q) => D.ellipse(q, x, m.eyeY + r * 0.1, r, r * 0.85));
-      },
+    glasses(ctx, rig, c, Hd) {
+      const F = rig.face;
+      V.dline(ctx, rig, Hd.at, V.curvePts(30, (t) => { const phi = U.lerp(-PI, PI, t); return [F.eye - 0.08 - 0.12 * Math.max(0, -Math.cos(phi)) + 0.06 * Math.max(0, Math.sin(phi)), phi, rig.head.w * 0.05]; }), c.main, rig.line * 1.3);
+      const f = SC.face.frame(rig, Hd, F.eye, F.eyePhi, rig.head.w * 0.06);
+      if (f.facing > 0) SC.face.withFrame(ctx, f, 1, () => {
+        const r = rig.head.w * 0.3;
+        D.fill(ctx, c.main, (q) => D.ellipse(q, 0, r * 0.1, r, r * 0.85));
+      });
     },
   });
 
@@ -193,151 +186,157 @@
   reg({
     slot: 'neckAcc', id: 'bufanda', name: 'Bufanda',
     colors: { main: { label: 'Lana', value: '#d8513f' }, stripe: { label: 'Rayas', value: '#f4e1c1' } },
-    layers: {
-      neckAcc(ctx, rig, c) {
-        const t = rig.torso, nw = rig.neck.w;
-        const tail = [{ x: t.top.x + nw * 0.55, y: t.top.y }, { x: t.top.x + nw * 0.75, y: t.top.y + t.len * 0.3 }, { x: t.top.x + nw * 0.7, y: t.top.y + t.len * 0.62 }];
-        D.limb(ctx, rig, tail, nw * 0.62, c.main, { cap: 'butt' });
-        D.detailLine(ctx, rig, c.stripe, (q) => {
-          for (const f of [0.78, 0.9]) {
-            const p = U.lerpPt(tail[1], tail[2], f);
-            q.moveTo(p.x - nw * 0.3, p.y); q.lineTo(p.x + nw * 0.3, p.y);
-          }
-        }, 2, true);
-        D.limb(ctx, rig, [U.lerpPt(t.L.neck, t.L.shoulder, 0.3), { x: t.top.x, y: t.top.y + nw * 0.15 }, U.lerpPt(t.R.neck, t.R.shoulder, 0.3)], nw * 0.7, c.main);
-      },
+    torso(ctx, rig, c, T) {
+      const L = T.L, r = rig.dim.neckR * 0.7;
+      const ring = V.curvePts(20, (t) => V.surf(T.at(L.neckBase - 0.01), U.lerp(-PI, PI, t), SC.clothes.E(rig, 4) + r * 0.6));
+      const tail = [V.surf(T.at(L.neckBase + 0.01), -0.55, r * 1.2), V.surf(T.at(L.armpit), -0.6, r * 1.2 + SC.clothes.E(rig, 4)), V.surf(T.at(L.underbust + 0.06), -0.55, r + SC.clothes.E(rig, 4))];
+      const tv = V.tube(rig, tail, (k) => r * (1.1 - 0.1 * k), 0.4, 10);
+      const rv = V.tube(rig, ring, r, 0.8, 12);
+      const tailFront = V.facing(rig, T.at(L.armpit), tail[1]) > 0;
+      if (!tailFront) fill(ctx, rig, tv, c.main);
+      fill(ctx, rig, rv, c.main);
+      if (tailFront) {
+        fill(ctx, rig, tv, c.main);
+        for (const k of [0.75, 0.88]) {
+          const p = V.proj(rig, Vc.lerp(tail[1], tail[2], k)), w = r * 0.9;
+          D.stroke(ctx, c.stripe, rig.line * 2, (q) => { q.moveTo(p.x - w * 0.7, p.y); q.lineTo(p.x + w * 0.7, p.y); });
+        }
+      }
     },
   });
-
   reg({
     slot: 'neckAcc', id: 'corbata', name: 'Corbata',
     colors: { main: { label: 'Corbata', value: '#b8323f' } },
-    layers: {
-      neckAcc(ctx, rig, c) {
-        const t = rig.torso, x = t.top.x, y = t.top.y + t.len * 0.05, w = rig.neck.w * 0.3;
-        D.shape(ctx, rig, c.main, (q) => {
-          q.moveTo(x - w * 0.7, y + w * 1.1);
-          q.lineTo(x - w * 1.1, y + t.len * 0.55);
-          q.lineTo(x, y + t.len * 0.64);
-          q.lineTo(x + w * 1.1, y + t.len * 0.55);
-          q.lineTo(x + w * 0.7, y + w * 1.1);
-        }, { shade: (q) => q.rect(x + w * 0.2, y, w * 2, t.len) });
-        D.shape(ctx, rig, U.shade(c.main, -0.1), (q) => { q.moveTo(x - w, y); q.lineTo(x + w, y); q.lineTo(x + w * 0.7, y + w * 1.2); q.lineTo(x - w * 0.7, y + w * 1.2); });
-      },
+    torso(ctx, rig, c, T) {
+      const L = T.L, e = SC.clothes.E(rig, 4);
+      const line = D.lineColor(rig, c.main);
+      V.decal(ctx, rig, T.at, [[L.neckBase + 0.03, -0.1, e], [L.waist + 0.02, -0.16, e], [L.waist + 0.06, 0, e], [L.waist + 0.02, 0.16, e], [L.neckBase + 0.03, 0.1, e]], { fill: c.main, stroke: line, width: rig.line * 0.8, minVis: 0.5 });
+      V.decal(ctx, rig, T.at, [[L.neckBase, -0.13, e * 1.4], [L.neckBase, 0.13, e * 1.4], [L.neckBase + 0.035, 0.09, e * 1.4], [L.neckBase + 0.035, -0.09, e * 1.4]], { fill: U.shade(c.main, -0.1), stroke: line, width: rig.line * 0.8, minVis: 0.5 });
     },
   });
-
   reg({
     slot: 'neckAcc', id: 'colgante', name: 'Colgante',
     colors: { main: { label: 'Cadena', value: '#e2c065' }, gem: { label: 'Gema', value: '#39b3a8' } },
-    layers: {
-      neckAcc(ctx, rig, c) {
-        const t = rig.torso, p = { x: t.top.x, y: t.top.y + t.len * 0.28 };
-        D.detailLine(ctx, rig, c.main, (q) => {
-          q.moveTo(t.L.neck.x, t.L.neck.y); q.quadraticCurveTo(t.L.neck.x, p.y, p.x, p.y);
-          q.quadraticCurveTo(t.R.neck.x, p.y, t.R.neck.x, t.R.neck.y);
-        }, 0.9, true);
-        const r = rig.neck.w * 0.22;
-        D.shape(ctx, rig, c.gem, (q) => { q.moveTo(p.x, p.y); q.lineTo(p.x + r, p.y + r * 1.2); q.lineTo(p.x, p.y + r * 2.6); q.lineTo(p.x - r, p.y + r * 1.2); },
-          { light: (q) => D.ellipse(q, p.x - r * 0.3, p.y + r, r * 0.25, r * 0.4) });
-      },
+    torso(ctx, rig, c, T) {
+      const L = T.L, e = SC.clothes.E(rig, 3);
+      const pts = V.curvePts(24, (t) => { const phi = U.lerp(-PI, PI, t); return [L.neckBase + 0.005 + Math.max(0, Math.cos(phi)) * 0.13, phi, e]; });
+      V.dline(ctx, rig, T.at, pts, c.main, rig.line * 0.9, { thr: 0 });
+      const l = L.neckBase + 0.14;
+      V.decal(ctx, rig, T.at, [[l, 0, e], [l + 0.025, 0.1, e], [l + 0.06, 0, e], [l + 0.025, -0.1, e]], { fill: c.gem, stroke: D.lineColor(rig, c.gem), width: rig.line * 0.6, minVis: 0.7 });
     },
   });
 
   // ---------- Espalda ----------
+  function backSheet(rig, T, e, widthTop, widthBot, yBot, wave) {
+    const L = T.L, Rt = rig.R(1);
+    const u = SC.mat.mv(Rt, Vc.v(1, 0, 0)), v = SC.mat.mv(Rt, Vc.v(0, 0, 1));
+    const top = T.at(L.shoulder), n0 = T.at(L.neckBase + 0.01);
+    const rings = [V.ring(Object.assign({}, n0, { a: n0.a + e, a2: n0.a2 + e, b: n0.b + e, b2: n0.b2 + e }), 20)];
+    for (let i = 0; i <= 8; i++) {
+      const k = i / 8, y = U.lerp(top.c.y, yBot, k);
+      const w = U.lerp(widthTop, widthBot, Math.sqrt(k));
+      const back = V.surf(top, PI, 0).z - e;
+      const s = V.sec(Vc.v(U.lerp(top.c.x, rig.pivot.x, k), y, back - rig.dim.backD * (0.2 + 0.6 * k)), u, v, w, w, rig.dim.backD * (0.6 - 0.3 * k) + e, rig.dim.backD * 0.3, { bump: k > 0.9 ? wave : 0, bumpN: 10 });
+      rings.push(V.ring(s, 20));
+    }
+    return V.fromRings(rig, rings, widthTop * 0.5);
+  }
   reg({
     slot: 'backAcc', id: 'capa', name: 'Capa',
     colors: { main: { label: 'Tela', value: '#a3263a' }, clasp: { label: 'Broche', value: '#e2c065' } },
-    layers: {
-      backAcc(ctx, rig, c) {
-        const t = rig.torso, y = rig.ground - rig.legLen * 0.15, half = rig.sizes.shoulderHalf * 1.9;
-        D.shape(ctx, rig, c.main, (q) => {
-          q.moveTo(t.L.neck.x, t.L.neck.y);
-          q.lineTo(t.R.neck.x, t.R.neck.y);
-          q.quadraticCurveTo(t.R.shoulder.x + rig.sizes.armW, t.R.shoulder.y, rig.hip.x + half, y);
-          const n = 5;
-          for (let i = 1; i <= n; i++) {
-            const x0 = rig.hip.x + half - (2 * half * (i - 0.5)) / n, x1 = rig.hip.x + half - (2 * half * i) / n;
-            q.quadraticCurveTo(x0, y + rig.sizes.legW * (i % 2 ? 0.5 : -0.2), x1, y);
-          }
-          q.quadraticCurveTo(t.L.shoulder.x - rig.sizes.armW, t.L.shoulder.y, t.L.neck.x, t.L.neck.y);
-        }, { shade: (q) => q.rect(0, 0, 9999, 9999) });
-      },
-      neckAcc(ctx, rig, c) {
-        const t = rig.torso;
-        for (const s of [-1, 1]) {
-          const T = s < 0 ? t.L : t.R;
-          D.limb(ctx, rig, [U.lerpPt(T.neck, T.shoulder, 0.8), { x: t.top.x, y: t.top.y + t.len * 0.12 }], rig.neck.w * 0.12, U.shade(c.clasp, -0.2), { shade: false });
-        }
-        D.shape(ctx, rig, c.clasp, (q) => D.ellipse(q, t.top.x, t.top.y + t.len * 0.12, rig.neck.w * 0.22, rig.neck.w * 0.22));
-      },
+    items(rig, c, body) {
+      const T = body.torso;
+      const vol = backSheet(rig, T, SC.clothes.E(rig, 6), rig.dim.shoulderHalf * 1.15, rig.dim.shoulderHalf * 1.9, rig.ground - rig.legLen * 0.12, 0.06);
+      return [{ z: vol.z - 2, draw: (ctx) => fill(ctx, rig, vol, c.main, { shadeK: 0.25 }) }];
+    },
+    torso(ctx, rig, c, T) {
+      const L = T.L, e = SC.clothes.E(rig, 6);
+      for (const s of [-1, 1]) V.dline(ctx, rig, T.at, [[L.neckBase + 0.01, s * 1.3, e], [L.neckBase + 0.05, s * 0.2, e]], U.shade(c.clasp, -0.2), rig.line * 1.3, { thr: 0 });
+      V.decal(ctx, rig, T.at, V.curvePts(10, (t) => [L.neckBase + 0.055 + 0.02 * Math.sin(t * 2 * PI), 0.1 * Math.cos(t * 2 * PI), e * 1.2]), { fill: c.clasp, stroke: D.lineColor(rig, c.clasp), width: rig.line * 0.7, minVis: 0.7 });
     },
   });
 
   reg({
     slot: 'backAcc', id: 'alas', name: 'Alas',
     colors: { main: { label: 'Plumas', value: '#f7f4ff' } },
-    layers: {
-      backAcc(ctx, rig, c) {
-        const t = rig.torso, B = rig.B;
-        for (const s of [-1, 1]) {
-          const root = { x: t.top.x + s * rig.sizes.shoulderHalf * 0.4, y: t.top.y + t.len * 0.25 };
-          D.shape(ctx, rig, c.main, (q) => {
-            q.moveTo(root.x, root.y);
-            q.quadraticCurveTo(root.x + s * B * 0.2, t.top.y - t.len * 0.7, root.x + s * B * 0.5, t.top.y - t.len * 0.55);
-            const tip = { x: root.x + s * B * 0.5, y: t.top.y - t.len * 0.55 };
-            const n = 5;
-            for (let i = 1; i <= n; i++) {
-              const p = { x: tip.x - s * B * 0.07 * i, y: tip.y + t.len * 0.3 * i };
-              const mid = { x: (tip.x - s * B * 0.07 * (i - 0.5)) + s * B * 0.03, y: tip.y + t.len * 0.3 * (i - 0.5) + t.len * 0.12 };
-              q.quadraticCurveTo(mid.x, mid.y, p.x, p.y);
+    items(rig, c, body) {
+      const T = body.torso, B = rig.B, Rt = rig.R(1);
+      const out = [];
+      for (const s of [-1, 1]) {
+        const root = V.surf(T.at(T.L.armpit), PI - s * 0.35, 0);
+        const loc = (x, y, z) => Vc.add(root, SC.mat.mv(Rt, Vc.v(s * x * B, y * B, -z * B)));
+        const outline = [loc(0, 0, 0.02), loc(0.14, -0.2, 0.08), loc(0.4, -0.28, 0.16), loc(0.55, -0.2, 0.2)];
+        for (let i = 1; i <= 5; i++) outline.push(loc(0.55 - i * 0.075, -0.2 + i * 0.12, 0.2 - i * 0.03), loc(0.55 - i * 0.075 - 0.02, -0.2 + i * 0.12 - 0.05, 0.19 - i * 0.03));
+        outline.push(loc(0.05, 0.2, 0.05));
+        const P = outline.map((p) => V.proj(rig, p));
+        const z = P.reduce((a, p) => a + p.z, 0) / P.length;
+        out.push({
+          z,
+          draw: (ctx) => {
+            ctx.beginPath(); D.smooth(ctx, P, true);
+            ctx.lineWidth = rig.line * 2; ctx.strokeStyle = ctx.fillStyle = D.lineColor(rig, c.main); ctx.stroke(); ctx.fill();
+            ctx.beginPath(); D.smooth(ctx, P, true); ctx.fillStyle = c.main; ctx.fill();
+            if (rig.detail === 'high') {
+              ctx.save(); ctx.clip();
+              for (let i = 1; i <= 4; i++) {
+                const a = V.proj(rig, loc(0.06 * i, -0.05, 0.05)), b = V.proj(rig, loc(0.5 - i * 0.07, -0.1 + i * 0.12, 0.18));
+                D.stroke(ctx, U.shade(c.main, -0.2), rig.line * 0.7, (q) => { q.moveTo(a.x, a.y); q.lineTo(b.x, b.y); });
+              }
+              ctx.restore();
             }
-            q.quadraticCurveTo(root.x + s * B * 0.08, root.y + t.len * 0.3, root.x, root.y);
-          }, { shade: (q) => q.rect(root.x + (s < 0 ? -9999 : 0), t.top.y + t.len * 0.25, 9999, 9999) });
-        }
-      },
+          },
+        });
+      }
+      return out;
     },
   });
 
   reg({
     slot: 'backAcc', id: 'mochila', name: 'Mochila',
     colors: { main: { label: 'Tela', value: '#e2a23a' }, strap: { label: 'Correas', value: '#6b4630' } },
-    layers: {
-      backAcc(ctx, rig, c) {
-        const t = rig.torso, w = rig.sizes.shoulderHalf * 1.2;
-        D.shape(ctx, rig, c.main, (q) => {
-          const x = rig.hip.x - w, y = t.top.y + t.len * 0.05, h = t.len * 0.85, r = w * 0.3;
-          q.moveTo(x + r, y); q.lineTo(x + 2 * w - r, y); q.quadraticCurveTo(x + 2 * w, y, x + 2 * w, y + r);
-          q.lineTo(x + 2 * w, y + h); q.lineTo(x, y + h); q.lineTo(x, y + r); q.quadraticCurveTo(x, y, x + r, y);
-        }, { shade: (q) => q.rect(rig.hip.x + w * 0.6, 0, 9999, 9999) });
-      },
-      neckAcc(ctx, rig, c) {
-        const t = rig.torso;
-        for (const s of [-1, 1]) {
-          const T = s < 0 ? t.L : t.R;
-          D.limb(ctx, rig, [U.lerpPt(T.neck, T.shoulder, 0.55), U.lerpPt(T.armpit, T.chest, 0.5), U.lerpPt(T.chest, T.waist, 0.6)], rig.sizes.armW * 0.35, c.strap, { shade: false });
-        }
-      },
+    items(rig, c, body) {
+      const T = body.torso, L = T.L, Rt = rig.R(1), d = rig.dim;
+      const u = SC.mat.mv(Rt, Vc.v(1, 0, 0)), v = SC.mat.mv(Rt, Vc.v(0, 0, 1));
+      const secs = [L.shoulder + 0.02, L.shoulder + 0.05, L.bust, L.waist, L.waist + 0.06].map((l, i) => {
+        const s = T.at(l), back = V.surf(s, PI, 0);
+        const r = [0.7, 0.95, 1, 1, 0.8][i];
+        return V.sec(Vc.add(back, Vc.mul(v, -d.backD * 0.9)), u, v, d.shoulderHalf * 0.78 * r, d.shoulderHalf * 0.78 * r, d.backD * 0.9 * r, d.backD * 0.9 * r);
+      });
+      const vol = V.fromSections(rig, secs, 12);
+      return [{ z: vol.z, draw: (ctx) => fill(ctx, rig, vol, c.main, { shadeK: 0.3 }) }];
+    },
+    torso(ctx, rig, c, T) {
+      const L = T.L, e = SC.clothes.E(rig, 6);
+      for (const s of [-1, 1]) {
+        const pts = [[L.neckBase + 0.02, s * 1.9], [L.neckBase + 0.02, s * 1.2], [L.armpit, s * 0.75], [L.underbust + 0.02, s * 0.8], [L.waist, s * 1.1]].map(([l, p]) => V.surf(T.at(l), p, e));
+        fill(ctx, rig, V.tube(rig, pts, rig.dim.armR * 0.28, 0.35, 8), c.strap, { shadeK: 0.2 });
+      }
     },
   });
 
   reg({
     slot: 'backAcc', id: 'espada', name: 'Espada',
     colors: { main: { label: 'Hoja', value: '#cfd8e3' }, hilt: { label: 'Empuñadura', value: '#5a3d2b' } },
-    layers: {
-      backAcc(ctx, rig, c) {
-        const t = rig.torso, B = rig.B;
-        const a = { x: t.top.x + rig.sizes.shoulderHalf * 1.2, y: t.top.y - t.len * 0.35 };
-        const b = { x: rig.hip.x - rig.sizes.hipHalf * 1.5, y: rig.hip.y + rig.legLen * 0.15 };
-        const g = U.lerpPt(a, b, 0.2);
-        D.limb(ctx, rig, [g, b], B * 0.035, c.main, { cap: 'butt' });
-        D.limb(ctx, rig, [a, g], B * 0.022, c.hilt, { shade: false });
-        const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-        const nx = -dy / len, ny = dx / len;
-        D.limb(ctx, rig, [{ x: g.x + nx * B * 0.05, y: g.y + ny * B * 0.05 }, { x: g.x - nx * B * 0.05, y: g.y - ny * B * 0.05 }], B * 0.02, '#d9b44a', { shade: false });
-        D.shape(ctx, rig, '#d9b44a', (q) => D.ellipse(q, a.x, a.y, B * 0.018, B * 0.018));
-      },
+    items(rig, c, body) {
+      const T = body.torso, B = rig.B, Rt = rig.R(1);
+      const back = (l, phi, dz) => Vc.add(V.surf(T.at(l), phi, 0), SC.mat.mv(Rt, Vc.v(0, 0, -dz)));
+      const a = Vc.add(back(T.L.neckBase, PI - 0.6, B * 0.05), SC.mat.mv(Rt, Vc.v(B * 0.06, -B * 0.1, 0)));
+      const g = back(T.L.shoulder + 0.02, PI - 0.45, B * 0.05);
+      const b = Vc.add(back(T.L.hip2, PI + 0.9, B * 0.05), SC.mat.mv(Rt, Vc.v(-B * 0.1, B * 0.12, 0)));
+      const blade = V.tube(rig, [g, Vc.lerp(g, b, 0.9), b], [B * 0.018, B * 0.017, B * 0.004], 0.3, 8);
+      const hilt = V.tube(rig, [a, g], B * 0.011, 1, 8);
+      const dir = Vc.norm(Vc.sub(b, a)), side = Vc.norm(Vc.cross(dir, SC.mat.mv(Rt, Vc.v(0, 0, 1))));
+      const guard = V.tube(rig, [Vc.madd(g, side, B * 0.045), Vc.madd(g, side, -B * 0.045)], B * 0.009, 1, 8);
+      const z = (blade.z + hilt.z) / 2;
+      return [{
+        z,
+        draw: (ctx) => {
+          fill(ctx, rig, blade, c.main, { shadeK: 0.5, shadeAmt: 0.2 });
+          fill(ctx, rig, hilt, c.hilt);
+          fill(ctx, rig, guard, '#d9b44a');
+          fill(ctx, rig, V.tube(rig, [Vc.madd(a, dir, -B * 0.012), a], B * 0.016, 1, 8), '#d9b44a');
+        },
+      }];
     },
   });
-
 })();

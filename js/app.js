@@ -2,7 +2,7 @@
 (() => {
   const U = SC.util, X = SC.exporter;
   const $ = (id) => document.getElementById(id);
-  const STORAGE_KEY = 'forja-sprites:personaje';
+  const STORAGE_KEY = 'forja-sprites:personaje:v2';
 
   const PALETTES = {
     skin: ['#fde6d4', '#f3cdb0', '#e8b48f', '#c98d64', '#a26a45', '#7a4a2e', '#553223', '#a9c8e8', '#a8cf93'],
@@ -11,22 +11,27 @@
     cloth: ['#4f86d9', '#e04848', '#f2f2f5', '#2b2233', '#34405e', '#5f8f4e', '#e8b93a', '#8e5bc8', '#e87a9b', '#9b7a52', '#3c4c63', '#39b3a8', '#d8513f', '#27386f', '#f4e1c1'],
   };
 
+  const pct = (v) => Math.round(v * 100) + '%';
   const BODY_SLIDERS = [
     { key: 'heads', label: 'Proporción', min: 2.5, max: 8, step: 0.1, fmt: (v) => v.toFixed(1) + ' cab.' },
-    { key: 'height', label: 'Altura', min: 0.75, max: 1, step: 0.01, fmt: (v) => Math.round(v * 100) + '%' },
+    { key: 'height', label: 'Altura', min: 0.75, max: 1, step: 0.01, fmt: pct },
     { key: 'build', label: 'Complexión', min: 0.75, max: 1.4, step: 0.01, fmt: (v) => v.toFixed(2) },
+    { key: 'muscle', label: 'Musculatura', min: 0, max: 1, step: 0.01, fmt: pct },
+    { key: 'bust', label: 'Busto', min: 0, max: 1, step: 0.01, fmt: pct, only: 'f' },
     { key: 'shoulders', label: 'Hombros', min: 0.8, max: 1.35, step: 0.01, fmt: (v) => v.toFixed(2) },
+    { key: 'waist', label: 'Cintura', min: 0.8, max: 1.35, step: 0.01, fmt: (v) => v.toFixed(2) },
     { key: 'hips', label: 'Caderas', min: 0.8, max: 1.35, step: 0.01, fmt: (v) => v.toFixed(2) },
   ];
+  const SEXES = { f: 'Femenino', m: 'Masculino' };
 
   const defaultCharacter = () => ({
     name: 'Personaje',
-    body: { heads: 6, height: 1, build: 1, shoulders: 1, hips: 1 },
+    body: Object.assign({}, SC.BODY_DEFAULTS),
     expression: 'feliz',
     style: { lineMode: 'colored', lineWidth: 1 },
     slots: {
       body: { part: 'humano', colors: {} },
-      eyes: { part: 'anime', colors: {} },
+      eyes: { part: 'shoujo', colors: {} },
       hair: { part: 'largo', colors: {} },
       top: { part: 'marinero', colors: {} },
       bottom: { part: 'falda', colors: {} },
@@ -39,6 +44,8 @@
     ch: loadStored() || defaultCharacter(),
     mode: 'vn',
     anim: 'idle',
+    view: 'front',
+    dirs: true,
     playing: true,
     frame: 0,
     exportAnims: new Set(['idle', 'walk', 'run', 'jump', 'wave', 'attack']),
@@ -74,6 +81,7 @@
       const v = Number(ch.body && ch.body[s.key]);
       if (Number.isFinite(v)) out.body[s.key] = U.clamp(v, s.min, s.max);
     }
+    if (ch.body && SEXES[ch.body.sex]) out.body.sex = ch.body.sex;
     for (const slot of SC.SLOTS) {
       const sel = ch.slots[slot.id];
       if (sel && SC.getPart(slot.id, sel.part)) {
@@ -166,9 +174,18 @@
       return groups[name];
     };
 
-    // Cuerpo: tipo, proporciones y colores.
+    // Cuerpo: sexo, proporciones y colores.
     const g = group('Cuerpo');
+    const sexChips = el('div', { class: 'chips' });
+    for (const [id, name] of Object.entries(SEXES)) {
+      sexChips.append(el('button', {
+        class: 'chip' + (state.ch.body.sex === id ? ' active' : ''), text: name,
+        onclick: () => { state.ch.body.sex = id; changed(true); },
+      }));
+    }
+    g.append(el('div', { class: 'slot' }, [el('div', { class: 'slot-title', text: 'Anatomía' }), sexChips]));
     for (const s of BODY_SLIDERS) {
+      if (s.only && s.only !== state.ch.body.sex) continue;
       const out = el('output', { text: s.fmt(state.ch.body[s.key]) });
       const input = el('input', { type: 'range', min: s.min, max: s.max, step: s.step, value: state.ch.body[s.key], 'aria-label': s.label });
       input.addEventListener('input', () => {
@@ -190,6 +207,17 @@
         }
         group('Cara').append(el('div', { class: 'slot' }, [el('div', { class: 'slot-title', text: 'Expresión' }), chips]));
       }
+    }
+  }
+
+  function buildViewUI() {
+    const chips = $('viewChips');
+    chips.innerHTML = '';
+    for (const [id, v] of Object.entries(SC.VIEWS)) {
+      chips.append(el('button', {
+        class: 'chip' + (state.view === id ? ' active' : ''), text: v.name,
+        onclick: () => { state.view = id; buildViewUI(); draw(); },
+      }));
     }
   }
 
@@ -234,16 +262,20 @@
       outline: $('pxOutline').checked,
       innerLines: $('pxInner').checked,
       lineMode: state.ch.style.lineMode,
+      view: state.view,
     };
   }
 
   function vnOptions() {
-    return { frame: $('vnFrame').value, scale: Number($('vnScale').value) };
+    return { frame: $('vnFrame').value, scale: Number($('vnScale').value), view: state.view };
   }
+
+  // Direcciones típicas de un juego 2D (vista cenital o lateral).
+  const DIRS = [{ view: 'front', dir: 'abajo' }, { view: 'left', dir: 'izquierda' }, { view: 'side', dir: 'derecha' }, { view: 'back', dir: 'arriba' }];
 
   function pixelFrames() {
     const o = pxOptions();
-    const key = JSON.stringify([state.ch, o, state.anim]);
+    const key = JSON.stringify([state.ch, o, state.anim, state.view]);
     if (state.pxCache.key !== key) {
       state.pxCache = { key, frames: SC.render.renderAnimation(state.ch, state.anim, 'pixel', o) };
     }
@@ -264,11 +296,7 @@
       const box = $('vnFrame').value === 'bust' ? SC.render.bustBox(state.ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
       const k = Math.min(W / box.w, H / box.h) * 0.94;
       vctx.setTransform(k, 0, 0, k, (W - box.w * k) / 2 - box.x * k, (H - box.h * k) / 2 - box.y * k);
-      SC.render.drawCharacter(vctx, state.ch, currentPose(), {
-        detail: 'high',
-        line: 3.2 * state.ch.style.lineWidth,
-        lineMode: state.ch.style.lineMode,
-      });
+      SC.render.drawCharacter(vctx, state.ch, currentPose(), SC.render.vnDrawOpts(state.ch, { view: state.view }));
     } else {
       const frames = pixelFrames();
       const f = frames[state.frame % frames.length];
@@ -314,12 +342,17 @@
     ch.name = state.ch.name;
     ch.style = state.ch.style;
     ch.expression = pick(Object.keys(SC.EXPRESSIONS));
+    const sex = r() < 0.5 ? 'f' : 'm';
     ch.body = {
+      sex,
       heads: +(3 + r() * 4.5).toFixed(1),
       height: +(0.85 + r() * 0.15).toFixed(2),
       build: +(0.85 + r() * 0.35).toFixed(2),
-      shoulders: +(0.85 + r() * 0.4).toFixed(2),
-      hips: +(0.85 + r() * 0.4).toFixed(2),
+      muscle: +(r() * 0.8).toFixed(2),
+      bust: +(r()).toFixed(2),
+      shoulders: +(0.9 + r() * 0.25).toFixed(2),
+      waist: +(0.9 + r() * 0.25).toFixed(2),
+      hips: +(0.9 + r() * 0.25).toFixed(2),
     };
     const chance = { hair: 0.95, top: 1, outer: 0.3, bottom: 1, shoes: 1, headAcc: 0.35, faceAcc: 0.2, neckAcc: 0.3, backAcc: 0.25 };
     ch.slots = {};
@@ -336,7 +369,7 @@
       ch.slots[slot.id] = { part: def.id, colors };
     }
     const top = ch.slots.top && ch.slots.top.part;
-    if ((top === 'vestido' || top === 'tunica') && r() < 0.6) delete ch.slots.bottom;
+    if (['vestido', 'tunica', 'kimono'].includes(top) && r() < 0.7) delete ch.slots.bottom;
     return ch;
   }
 
@@ -365,7 +398,7 @@
         X.download(X.zip(files), `${name}_expresiones.zip`);
       } else if (kind === 'vn-sheet') {
         if (!anims.length) return status('Selecciona al menos una animación.');
-        const { canvas, meta } = X.spritesheet(ch, anims, 'vn', { frame: $('vnFrame').value, height: 500 }, `${name}_hoja`);
+        const { canvas, meta } = X.spritesheet(ch, anims, 'vn', { frame: $('vnFrame').value, height: 500, view: state.view }, `${name}_hoja`);
         X.download(X.zip([
           { name: `${name}_hoja.png`, data: await X.canvasBytes(canvas) },
           { name: `${name}_hoja.json`, data: JSON.stringify(meta, null, 2) },
@@ -377,7 +410,7 @@
       } else if (kind === 'px-sheet') {
         if (!anims.length) return status('Selecciona al menos una animación.');
         const k = Number($('pxExportScale').value);
-        const { canvas, meta } = X.spritesheet(ch, anims, 'pixel', pxOptions(), `${name}_sprites`);
+        const { canvas, meta } = X.spritesheet(ch, anims, 'pixel', pxOptions(), `${name}_sprites`, $('pxDirs').checked ? DIRS : null);
         meta.frameWidth *= k;
         meta.frameHeight *= k;
         X.download(X.zip([
@@ -438,11 +471,12 @@
   $('charName').value = state.ch.name;
   syncStyleInputs();
   buildEditor();
+  buildViewUI();
   buildAnimUI();
   new ResizeObserver(resize).observe($('stage'));
   resize();
   requestAnimationFrame(tick);
 
   // Acceso desde la consola para depurar o automatizar.
-  window.forja = { state, draw, randomCharacter, doExport, setMode };
+  window.forja = { state, draw, randomCharacter, doExport, setMode, buildEditor, buildViewUI };
 })();

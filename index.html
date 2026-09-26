@@ -33,6 +33,10 @@
         <canvas id="view"></canvas>
       </div>
       <div class="anim-bar">
+        <span class="bar-label">Vista</span>
+        <div class="chips" id="viewChips"></div>
+      </div>
+      <div class="anim-bar">
         <button id="btnPlay" class="icon" title="Reproducir / pausar (espacio)" aria-label="Reproducir o pausar">❚❚</button>
         <div class="chips" id="animChips"></div>
         <span class="frame-info" id="frameInfo">1/1</span>
@@ -86,6 +90,7 @@
         <label class="check"><input id="pxChibi" type="checkbox" checked> Proporciones chibi</label>
         <label class="check"><input id="pxOutline" type="checkbox" checked> Contorno exterior</label>
         <label class="check"><input id="pxInner" type="checkbox" checked> Líneas interiores</label>
+        <label class="check"><input id="pxDirs" type="checkbox" checked> 4 direcciones (abajo, izquierda, derecha, arriba)</label>
         <label class="row">Escala al exportar
           <select id="pxExportScale">
             <option value="1" selected>×1 (tamaño real)</option>
@@ -107,13 +112,14 @@
   </main>
 
   <script src="js/core/util.js"></script>
+  <script src="js/core/volume.js"></script>
   <script src="js/core/skeleton.js"></script>
   <script src="js/core/registry.js"></script>
   <script src="js/core/animations.js"></script>
   <script src="js/core/renderer.js"></script>
   <script src="js/core/exporter.js"></script>
   <script src="js/parts/body.js"></script>
-  <script src="js/parts/eyes.js"></script>
+  <script src="js/parts/face.js"></script>
   <script src="js/parts/hair.js"></script>
   <script src="js/parts/clothes.js"></script>
   <script src="js/parts/accessories.js"></script>

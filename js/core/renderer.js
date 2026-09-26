@@ -1,10 +1,15 @@
-// Renderizado del personaje en dos modos:
+// Renderizado del personaje.
+//
+// Se construye una lista de elementos con profundidad (z) — piernas, torso,
+// brazos, cabeza, pelo, capas... — y se pintan de atrás hacia delante
+// (algoritmo del pintor). Como la profundidad se calcula tras girar el
+// personaje, el orden correcto sale solo en cualquier vista.
+//
+// Modos:
 //  - Novela visual: vectorial, suavizado, con sombreado y todos los detalles.
-//  - Juego: pixel art de baja resolución, con menos detalle, generado a partir
-//    del mismo personaje (se dibuja a 4x y se reduce por "moda" de color).
-// Sólo usa Canvas 2D, así que funciona en equipos sin tarjeta gráfica dedicada.
+//  - Juego: pixel art de baja resolución generado a partir del mismo personaje.
 SC.render = (() => {
-  const U = SC.util;
+  const U = SC.util, V = SC.V;
 
   function makeCanvas(w, h) {
     const c = document.createElement('canvas');
@@ -13,66 +18,135 @@ SC.render = (() => {
     return c;
   }
 
-  // Dibuja el personaje sobre ctx (en coordenadas canónicas 600x1000).
-  function drawCharacter(ctx, ch, pose, opts = {}) {
-    const expr = SC.EXPRESSIONS[opts.expression || ch.expression] || SC.EXPRESSIONS.neutral;
-    const rig = SC.buildRig(ch, pose, Object.assign({}, opts, { expr }));
-    const hairSel = ch.slots.hair;
-    const hairDef = hairSel && SC.getPart('hair', hairSel.part);
-    rig.hairColor = hairDef ? SC.resolveColors(hairDef, hairSel).main : '#4a3226';
-    const bodySel = ch.slots.body;
-    const bodyDef = bodySel && SC.getPart('body', bodySel.part);
-    rig.skinColor = bodyDef ? SC.resolveColors(bodyDef, bodySel).skin : '#f3cdb0';
-
-    const equipped = [];
+  function equippedParts(ch) {
+    const list = [];
     for (const slot of SC.SLOTS) {
       const sel = ch.slots[slot.id];
       if (!sel || !sel.part) continue;
       const def = SC.getPart(slot.id, sel.part);
-      if (def) equipped.push({ def, colors: SC.resolveColors(def, sel) });
+      if (def) list.push({ slot: slot.id, def, c: SC.resolveColors(def, sel) });
     }
-    for (const layer of SC.LAYERS) {
-      for (const { def, colors } of equipped) {
-        const fn = def.layers[layer.id];
-        if (!fn) continue;
-        ctx.save();
-        if (layer.head) {
-          ctx.translate(rig.head.x, rig.head.y);
-          ctx.rotate(rig.head.rot);
+    return list;
+  }
+
+  function drawCharacter(ctx, ch, pose, opts = {}) {
+    const expr = SC.EXPRESSIONS[opts.expression || ch.expression] || SC.EXPRESSIONS.neutral;
+    const view = SC.VIEWS[opts.view || 'front'] || SC.VIEWS.front;
+    const rig = SC.buildRig(ch, pose, Object.assign({}, opts, { expr, yaw: view.yaw }));
+    const parts = equippedParts(ch);
+    const get = (slot) => parts.find((p) => p.slot === slot);
+    const bodyP = get('body'), hairP = get('hair');
+    rig.skinColor = bodyP ? bodyP.c.skin : '#f3cdb0';
+    rig.hairColor = hairP ? hairP.c.main : '#4a3226';
+    rig.equipped = parts;
+    rig.hasShoes = !!get('shoes');
+    rig.earType = bodyP ? bodyP.def.earType : 'human';
+
+    const body = SC.anatomy.build(rig);
+    const items = [];
+    const byRank = (fn) => parts.filter((p) => p.def[fn]).sort((a, b) => a.def.rank - b.def.rank);
+    const call = (fn, ...args) => { for (const p of byRank(fn)) p.def[fn](ctx, rig, p.c, ...args); };
+
+    // Piernas
+    for (const L of body.legs) {
+      items.push({ z: L.z, draw: () => { call('leg', L); } });
+    }
+    const zLegMax = Math.max(...body.legs.map((l) => l.z));
+
+    // Torso: piel (detrás de las piernas cercanas) y ropa (delante).
+    const T = body.torso;
+    items.push({ z: -1, draw: () => SC.anatomy.drawTorsoSkin(ctx, rig, bodyP.c, T) });
+    items.push({
+      z: zLegMax + 0.1,
+      draw: () => {
+        for (const p of byRank('torso')) {
+          p.def.torso(ctx, rig, p.c, T);
+          if (p.def.opening) {
+            const pts = p.def.opening(rig, T);
+            const P = V.project(rig, T.at, pts);
+            if (P.filter((q) => q.f > 0.05).length / P.length > 0.3) {
+              ctx.save();
+              V.clip(ctx, T.clothVol || T.vol);
+              ctx.beginPath(); SC.draw.poly(ctx, P); ctx.clip();
+              SC.anatomy.drawTorsoSkin(ctx, rig, bodyP.c, T);
+              for (const q of byRank('torso')) if (q.def.rank < p.def.rank) q.def.torso(ctx, rig, q.c, T);
+              ctx.restore();
+              if (p.def.openingEdge) p.def.openingEdge(ctx, rig, p.c, T, P);
+            }
+          }
         }
-        fn(ctx, rig, colors);
+      },
+    });
+
+    // Brazos
+    for (const A of body.arms) {
+      items.push({ z: A.z, draw: () => { call('arm', A); SC.anatomy.drawHand(ctx, rig, bodyP.c, A); } });
+    }
+
+    // Cabeza y pelo
+    const Hd = body.head;
+    for (const ear of Hd.ears) items.push({ z: ear.front ? 1000.5 : 999, draw: () => SC.anatomy.drawEar(ctx, rig, bodyP.c, ear) });
+    items.push({
+      z: 1000,
+      draw: () => {
+        SC.anatomy.drawHead(ctx, rig, bodyP.c, Hd);
+      },
+    });
+    items.push({
+      z: 1000.6,
+      draw: () => {
+        ctx.save();
+        V.clip(ctx, Hd.vol);
+        call('face', Hd);
         ctx.restore();
-      }
+      },
+    });
+    items.push({ z: 1000.7, draw: () => call('glasses', Hd) });
+    items.push({ z: 1001, draw: () => call('hairShell', Hd) });
+    items.push({ z: 1002, draw: () => call('hairFront', Hd) });
+    items.push({ z: 1003, draw: () => call('hat', Hd) });
+
+    for (const p of parts) if (p.def.items) for (const it of p.def.items(rig, p.c, body)) items.push(it);
+
+    items.sort((a, b) => a.z - b.z);
+    for (const it of items) {
+      ctx.save();
+      it.draw(ctx);
+      ctx.restore();
     }
     return rig;
+  }
+
+  function vnDrawOpts(ch, o = {}) {
+    return {
+      detail: 'high',
+      line: 2.6 * (ch.style && ch.style.lineWidth != null ? ch.style.lineWidth : 1),
+      lineMode: (ch.style && ch.style.lineMode) || 'colored',
+      expression: o.expression,
+      view: o.view,
+    };
   }
 
   // Encuadre de "busto" (cabeza y hombros) para novela visual.
   function bustBox(ch) {
     const rig = SC.buildRig(ch, null);
-    const top = rig.head.y - rig.head.h * 0.95;
-    const bottom = rig.hip.y - rig.torso.len * 0.15;
-    const h = bottom - top, w = h * 0.8;
+    const top = rig.head.c.y - rig.head.h * 0.85;
+    const bottom = rig.torso.at(rig.torso.L.underbust).c.y;
+    const h = bottom - top, w = h * 0.85;
     return { x: rig.cx - w / 2, y: top, w, h };
   }
 
-  // Novela visual: devuelve un canvas del tamaño pedido.
   function renderVN(ch, pose, o = {}) {
     const scale = o.scale || 1;
     const box = o.frame === 'bust' ? bustBox(ch) : { x: 0, y: 0, w: SC.CANVAS_W, h: SC.CANVAS_H };
-    const k = (o.height || SC.CANVAS_H) * scale / box.h;
+    const k = ((o.height || SC.CANVAS_H) * scale) / box.h;
     const cv = o.canvas || makeCanvas(box.w * k, box.h * k);
     const ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.save();
     ctx.scale(k, k);
     ctx.translate(-box.x, -box.y);
-    drawCharacter(ctx, ch, pose, {
-      detail: 'high',
-      line: 3.2 * (ch.style && ch.style.lineWidth != null ? ch.style.lineWidth : 1),
-      lineMode: (ch.style && ch.style.lineMode) || 'colored',
-      expression: o.expression,
-    });
+    drawCharacter(ctx, ch, pose, vnDrawOpts(ch, o));
     ctx.restore();
     return cv;
   }
@@ -82,18 +156,18 @@ SC.render = (() => {
     const W = o.w || 48, H = o.h || 64, SS = 4;
     const big = makeCanvas(W * SS, H * SS);
     const bctx = big.getContext('2d');
-    const k = (H * SS) / SC.CANVAS_H * (o.fill || 1);
+    const k = ((H * SS) / SC.CANVAS_H) * (o.fill || 1);
     bctx.save();
-    bctx.translate(W * SS / 2, H * SS - (SC.CANVAS_H - 960) * k * 0.5);
+    bctx.translate((W * SS) / 2, H * SS - (SC.CANVAS_H - SC.GROUND) * k * 0.5);
     bctx.scale(k, k);
-    bctx.translate(-300, -960);
-    const bodyOverride = o.chibi ? { heads: 3, height: 1 } : null;
+    bctx.translate(-300, -SC.GROUND);
     drawCharacter(bctx, ch, pose, {
       detail: 'low',
-      line: o.innerLines === false ? 0 : (SS * 1.05) / k,
+      line: o.innerLines === false ? 0 : (SS * 0.9) / k,
       lineMode: o.lineMode || 'colored',
       expression: o.expression,
-      bodyOverride,
+      view: o.view,
+      bodyOverride: o.chibi ? { heads: 3, height: 1 } : null,
     });
     bctx.restore();
 
@@ -114,7 +188,6 @@ SC.render = (() => {
             opaque++;
             const r = src[i], g = src[i + 1], b = src[i + 2];
             const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
-            // Los tonos oscuros (líneas, ojos) pesan más para no perderse.
             const lum = (r * 0.3 + g * 0.59 + b * 0.11) / 255;
             const wgt = 1 + (lum < 0.3 ? 1.6 : 0);
             const e = counts.get(key);
@@ -128,7 +201,6 @@ SC.render = (() => {
         dst[j] = best.r; dst[j + 1] = best.g; dst[j + 2] = best.b; dst[j + 3] = 255;
       }
     }
-
     if (o.outline !== false) {
       const oc = U.hexToRgb(o.outlineColor || '#1e1628');
       const copy = new Uint8ClampedArray(dst);
@@ -148,7 +220,6 @@ SC.render = (() => {
     return small;
   }
 
-  // Todos los fotogramas de una animación.
   function renderAnimation(ch, animId, mode, o = {}) {
     const anim = SC.ANIMS[animId];
     const frames = [];
@@ -159,5 +230,5 @@ SC.render = (() => {
     return frames;
   }
 
-  return { makeCanvas, drawCharacter, renderVN, renderPixel, renderAnimation, bustBox };
+  return { makeCanvas, drawCharacter, vnDrawOpts, renderVN, renderPixel, renderAnimation, bustBox };
 })();

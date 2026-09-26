@@ -4,23 +4,25 @@ Creador modular de personajes y sprites 2D para **novelas visuales** y **juegos*
 
 Un mismo personaje se puede exportar de dos formas:
 
-- **Novela visual**: ilustración vectorial detallada (sombreado, brillos en ojos y pelo,
-  expresiones faciales), hasta 1800 × 3000 px, cuerpo completo o busto.
+- **Novela visual**: ilustración detallada con volumen y sombreado, anatomía completa, 9+ expresiones,
+  vistas de frente, 3/4, perfil y espalda, hasta 1800 × 3000 px, cuerpo completo o busto.
 - **Juego (pixel art)**: sprites de baja resolución (de 32×32 a 96×128) con menos detalle,
-  proporciones chibi opcionales, contorno exterior y animaciones listas en hojas de sprites.
+  proporciones chibi opcionales, contorno exterior y animaciones en **4 direcciones**
+  (abajo, izquierda, derecha, arriba) listas en hojas de sprites.
 
 ## Requisitos
 
 Ninguno. Es HTML + JavaScript puro con Canvas 2D: sin dependencias, sin WebGL, sin conexión
 a internet. Funciona en cualquier PC con un navegador moderno (Chrome, Edge, Firefox) y no
-necesita tarjeta gráfica dedicada.
+necesita tarjeta gráfica dedicada (≈20 ms por fotograma en CPU).
 
 ## Cómo usarlo
 
 1. Abre `index.html` con doble clic (o sírvelo con cualquier servidor estático).
 2. Elige el modo arriba: **Novela visual** o **Juego · pixel art**.
 3. Personaliza el cuerpo, la cara, el pelo, la ropa y los accesorios en el panel izquierdo.
-4. Previsualiza las animaciones en la barra inferior (espacio = pausa).
+4. Cambia la **vista** (frente, 3/4, perfil, espalda...) y previsualiza las animaciones
+   (espacio = pausa).
 5. Exporta desde el panel derecho.
 
 El personaje se guarda automáticamente en el navegador. Con **Guardar** / **Cargar** puedes
@@ -28,31 +30,38 @@ llevarte el archivo `.json` a otro equipo.
 
 ## Qué incluye
 
-| Ranura | Opciones |
+| Apartado | Opciones |
 | --- | --- |
-| Cuerpo | Humano, Elfo · proporción (2,5–8 cabezas), altura, complexión, hombros, caderas, piel |
-| Ojos | Anime, Redondos, Afilados, Puntos · color de iris |
-| Expresiones | Neutral, Feliz, Muy feliz, Triste, Enfadado, Sorprendido, Avergonzado, Pensativo, Guiño |
-| Peinado | Corto, Largo, Media melena, Coletas, Coleta, De punta, Moño, Rizado, Rapado |
-| Parte superior | Camiseta, Camisa, Sudadera, Uniforme marinero, Vestido, Túnica, Armadura |
-| Abrigo | Chaqueta, Chaleco, Abrigo largo |
+| Anatomía | Femenina / masculina (hombros, caja torácica, busto o pectorales, cintura, pelvis, glúteos, cuello, mandíbula y cejas distintos) |
+| Proporciones | Cabezas de altura (2,5 chibi – 8 realista), altura, complexión, musculatura, busto, hombros, cintura, caderas |
+| Cuerpo | Humano, Elfo · tono de piel |
+| Ojos | Shōjo, Shōnen, Tsurime (rasgados), Tareme (caídos), Jitome (entornados), Sanpaku, Seinen (realista), Kawaii (grandes), Felino (pupila rasgada), Kitsune (afilados), Puntos |
+| Expresiones | Neutral, Feliz, Muy feliz, Triste, Enfadado, Sorprendido, Avergonzado, Pensativo, Guiño, Serio, Presumido |
+| Peinado | Corto, Largo, Media melena, Coletas, Coleta, De punta, Moño, Rizado, Trenza lateral, Hacia atrás, Rapado |
+| Parte superior | Camiseta, Camisa, Sudadera, Uniforme marinero, Vestido, Kimono, Túnica, Armadura |
+| Abrigo | Chaqueta, Chaleco, Abrigo largo (se abren por delante y dejan ver la ropa de debajo) |
 | Parte inferior | Pantalón, Pantalón corto, Falda, Falda larga |
 | Calzado | Zapatillas, Botas, Zapatos |
 | Accesorios | Gorra, Sombrero de mago, Lazo, Orejas de gato, Corona, Diadema, Gafas, Gafas de sol, Parche, Bufanda, Corbata, Colgante, Capa, Alas, Mochila, Espada |
 
 Cada pieza tiene sus propios colores editables.
 
-**Animaciones:** reposo, caminar, correr, saltar, saludar, atacar, hablar y parpadear.
+**Detalle anatómico:** clavículas, esternón, pectorales o curva del busto, abdominales según
+musculatura, ombligo, oblicuos, columna y omóplatos, rodillas, codos, manos con pulgar y
+dedos, pies con dedos, orejas, nariz con volumen en perfil y pómulos.
+
+**Animaciones:** reposo, caminar y correr (ciclo real de cadera y rodilla, braceo opuesto y
+torsión del torso), saltar, saludar, atacar, hablar y parpadear.
 
 ## Exportación
 
 | Botón | Resultado |
 | --- | --- |
-| PNG de la pose actual | Imagen de novela visual a la resolución elegida |
+| PNG de la pose actual | Imagen de novela visual a la resolución y vista elegidas |
 | Pack de expresiones | ZIP con un PNG por expresión y un `.rpy` con las definiciones `image` para **Ren'Py** |
 | Hoja de animación | ZIP con hoja de sprites (300×500 por fotograma) + JSON |
 | PNG del fotograma | Sprite de pixel art (×1, ×2 o ×4) |
-| Hoja de sprites + JSON | ZIP con hoja (una fila por animación) + JSON con tamaño de fotograma, fila, número de fotogramas, fps y si se repite |
+| Hoja de sprites + JSON | ZIP con hoja (una fila por animación y dirección) + JSON con tamaño de fotograma, fila, número de fotogramas, fps y si se repite |
 
 Ejemplo del JSON de la hoja de sprites:
 
@@ -62,40 +71,48 @@ Ejemplo del JSON de la hoja de sprites:
   "frameWidth": 48,
   "frameHeight": 64,
   "animations": {
-    "walk": { "row": 1, "frames": 4, "fps": 7, "loop": true }
+    "walk_abajo": { "row": 4, "frames": 8, "fps": 10, "loop": true },
+    "walk_izquierda": { "row": 5, "frames": 8, "fps": 10, "loop": true }
   }
 }
 ```
 
-Con estos datos se puede importar en Godot (`SpriteFrames` / `AnimatedSprite2D`), Unity
-(Sprite Editor → Grid by Cell Size), GameMaker, RPG Maker, Phaser, etc.
+Se puede importar en Godot (`SpriteFrames` / `AnimatedSprite2D`), Unity (Sprite Editor →
+Grid by Cell Size), GameMaker, RPG Maker, Phaser, etc.
 
 ## Cómo funciona
 
 ```
 js/
   core/
-    util.js        colores, geometría y primitivas de dibujo (contorno, sombreado)
-    skeleton.js    esqueleto 2D: calcula las articulaciones a partir de proporciones + pose
-    registry.js    ranuras, orden de capas, registro de piezas y expresiones
-    animations.js  poses por fotograma de cada animación
-    renderer.js    dibujo por capas; modo vectorial y conversión a pixel art
+    util.js        colores, vectores 3D, matrices de rotación y primitivas 2D
+    volume.js      motor 2.5D: secciones, proyección, siluetas, sombreado y calcos de superficie
+    skeleton.js    esqueleto 3D y proporciones anatómicas (femeninas / masculinas / chibi)
+    registry.js    ranuras, registro de piezas y expresiones
+    animations.js  poses 3D por fotograma
+    renderer.js    orden por profundidad, modo vectorial y conversión a pixel art
     exporter.js    PNG, hojas de sprites, ZIP (sin dependencias) y script de Ren'Py
   parts/
-    body.js        cuerpo base y rasgos de la cara
-    eyes.js        estilos de ojos
-    hair.js        peinados (capa trasera y delantera)
+    body.js        torso, extremidades con perfiles musculares, manos, pies, cabeza y orejas
+    face.js        estilos de ojos, cejas, nariz, boca y rubor
+    hair.js        peinados (casco, flequillo, melena, coletas, trenza, moño...)
     clothes.js     ropa y calzado
     accessories.js accesorios
   app.js           interfaz
 ```
 
-- Todas las piezas se dibujan **relativas al esqueleto**, así que cualquier prenda se adapta a
-  cualquier cuerpo (chibi o realista) y a cualquier animación sin dibujar nada a mano.
-- El personaje se pinta en **capas** (pelo trasero, piernas, torso, ropa, brazos, cabeza, cara,
-  flequillo, sombrero…), lo que permite combinar ropa libremente.
-- El modo pixel art dibuja el personaje con menos detalle a 4× y lo reduce eligiendo el color
-  más frecuente de cada bloque, lo que conserva colores planos y líneas limpias.
+- **Volúmenes por secciones.** Cada parte del cuerpo se describe con secciones transversales
+  (anchura, frente y espalda) colocadas sobre un esqueleto 3D. Al proyectarlas desde cualquier
+  ángulo la silueta sale sola: el busto o el pecho, los glúteos, los gemelos, los deltoides...
+  Por eso hay vistas de frente, 3/4, perfil y espalda sin dibujar nada a mano.
+- **Ropa como capas.** Las prendas son superficies desplazadas un grosor sobre el cuerpo, así que
+  siguen la anatomía, cualquier proporción y cualquier animación.
+- **Calcos de superficie.** Los detalles (clavículas, cuellos, botones, estampados, pliegues) se
+  definen sobre la superficie 3D y se ocultan solos cuando quedan detrás.
+- **Orden por profundidad.** Brazos, piernas, pelo, capas o alas se ordenan según su profundidad
+  real tras girar, así que de espaldas la melena y la capa quedan delante del cuerpo.
+- **Pixel art.** El personaje se dibuja con menos detalle a 4× y se reduce eligiendo el color más
+  frecuente de cada bloque, lo que conserva colores planos y líneas limpias.
 
 ## Añadir una pieza nueva
 
@@ -103,20 +120,20 @@ Crea (o edita) un archivo en `js/parts/` y regístrala. Por ejemplo, un cinturó
 
 ```js
 SC.registerPart({
-  slot: 'neckAcc',            // ranura: body, eyes, hair, top, outer, bottom, shoes, headAcc, faceAcc, neckAcc, backAcc
+  slot: 'neckAcc',            // body, eyes, hair, top, outer, bottom, shoes, headAcc, faceAcc, neckAcc, backAcc
   id: 'cinturon',
   name: 'Cinturón',
   colors: { main: { label: 'Cuero', value: '#5a3d2b' } },
-  layers: {
-    // Capa donde se dibuja (ver SC.LAYERS en registry.js).
-    outer(ctx, rig, c) {
-      const t = rig.torso, y = rig.hip.y - t.len * 0.1;
-      SC.draw.limb(ctx, rig, [{ x: t.L.waist.x, y }, { x: t.R.waist.x, y }], t.len * 0.06, c.main, { cap: 'butt' });
-    },
+  // Se dibuja sobre el torso: T.shell(grosor, nivelDesde, nivelHasta) crea una capa 3D.
+  torso(ctx, rig, c, T) {
+    const band = T.shell(rig.B * 0.02, T.L.waist - 0.02, T.L.waist + 0.02);
+    SC.V.fill(ctx, rig, band, c.main);
   },
 });
 ```
 
-Si es un archivo nuevo, añádelo con un `<script>` en `index.html` después de los demás
-archivos de `js/parts/`. La pieza aparecerá sola en el editor, en el aleatorio y en todas
-las exportaciones.
+Otras funciones disponibles: `arm(ctx, rig, c, A)` y `leg(ctx, rig, c, L)` para cada
+extremidad, `hat` y `glasses` para la cabeza, e `items(rig, c, body)` para elementos sueltos
+ordenados por profundidad (capas, alas...). Si es un archivo nuevo, añádelo con un `<script>`
+en `index.html` después de los demás archivos de `js/parts/`. La pieza aparecerá sola en el
+editor, en el aleatorio y en todas las exportaciones.
