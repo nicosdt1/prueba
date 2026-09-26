@@ -1,0 +1,13 @@
+{
+  "name": "forja-tools",
+  "private": true,
+  "type": "module",
+  "description": "Herramientas de desarrollo: convierte los packs CC0 en paquetes ligeros para la app.",
+  "scripts": { "build-cc0": "node build-cc0.mjs" },
+  "dependencies": {
+    "@gltf-transform/core": "^4.5.0",
+    "@gltf-transform/extensions": "^4.5.0",
+    "@gltf-transform/functions": "^4.5.0",
+    "sharp": "^0.34.0"
+  }
+}
