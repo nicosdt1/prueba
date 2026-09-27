@@ -13,16 +13,6 @@
       <span class="logo" aria-hidden="true">◆</span>
       <h1>Forja de Sprites</h1>
     </div>
-    <label class="engine">Motor
-      <select id="engine" aria-label="Motor de dibujo">
-        <option value="sdf" selected>Anatómico SDF (nuevo)</option>
-        <option value="anat">Anatómico clásico</option>
-        <option value="gen">Generado (ligero)</option>
-        <option value="mod">Modular CC0 (piezas combinables)</option>
-        <option value="vrm">Modelo VRM (anime 3D)</option>
-        <option value="lpc">Hoja LPC (pixel art)</option>
-      </select>
-    </label>
     <div class="mode" role="tablist" aria-label="Modo">
       <button role="tab" data-mode="vn" class="active">Novela visual</button>
       <button role="tab" data-mode="pixel">Juego · pixel art</button>
@@ -137,40 +127,22 @@
   </main>
 
   <script src="js/core/util.js"></script>
-  <script src="js/core/volume.js"></script>
-  <script src="js/core/skeleton.js"></script>
-  <script src="js/core/registry.js"></script>
-  <script src="js/core/animations.js"></script>
-  <script src="js/core/renderer.js"></script>
+  <script src="js/core/catalog.js"></script>
   <script src="js/core/exporter.js"></script>
-  <script src="js/parts/body.js"></script>
-  <script src="js/parts/face.js"></script>
-  <script src="js/parts/hair.js"></script>
-  <script src="js/parts/clothes.js"></script>
-  <script src="js/parts/accessories.js"></script>
-  <script src="vendor/vrm-bundle.js"></script>
-  <script src="js/vrm/recolor.js"></script>
-  <script src="js/vrm/engine.js"></script>
-  <script src="js/mod/engine.js"></script>
-  <script src="js/lpc/lpc.js"></script>
   <script src="js/anat/canon.js"></script>
   <script src="js/anat/math.js"></script>
   <script src="js/anat/body.js"></script>
   <script src="js/anat/rig.js"></script>
-  <script src="js/anat/shapes.js"></script>
-  <script src="js/anat/head.js"></script>
-  <script src="js/anat/render.js"></script>
-  <script src="js/anat/parts.js"></script>
   <script src="js/anat/validate.js"></script>
-  <script src="js/sdf/core.js"></script>
-  <script src="js/sdf/build.js"></script>
-  <script src="js/sdf/march.js"></script>
-  <script src="js/sdf/gl.js"></script>
-  <script src="js/sdf/compose.js"></script>
-  <script src="js/sdf/face.js"></script>
-  <script src="js/sdf/hair.js"></script>
-  <script src="js/sdf/clothes.js"></script>
-  <script src="js/sdf/engine.js"></script>
+  <script src="assets/mh/mh-data.js"></script>
+  <script src="js/render/camera.js"></script>
+  <script src="js/render/compose.js"></script>
+  <script src="js/render/face.js"></script>
+  <script src="js/render/pixel.js"></script>
+  <script src="js/mh/model.js"></script>
+  <script src="js/mh/raster.js"></script>
+  <script src="js/mh/dress.js"></script>
+  <script src="js/mh/engine.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

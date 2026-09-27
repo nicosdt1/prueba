@@ -4,7 +4,7 @@ SC.anatValidate = (() => {
   const M = SC.AM, C = SC.CANON, B = SC.anatBody, R = SC.anatRig;
 
   function run(cfg, o = {}) {
-    const P = B.params(cfg.params || cfg), look = Object.assign({}, SC.anat.DEFAULT_LOOK, cfg.look || {});
+    const P = B.params(cfg.params || cfg), look = Object.assign({}, SC.engine.DEFAULT_LOOK, cfg.look || {});
     const sk = B.skeleton(P), out = [];
     const add = (level, name, msg) => out.push({ level, name, msg });
 

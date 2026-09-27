@@ -100,7 +100,7 @@ SC.exporter = (() => {
   // Escala un canvas de pixel art sin suavizado.
   function upscale(canvas, k) {
     if (k === 1) return canvas;
-    const out = SC.render.makeCanvas(canvas.width * k, canvas.height * k);
+    const out = SC.makeCanvas(canvas.width * k, canvas.height * k);
     const ctx = out.getContext('2d');
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(canvas, 0, 0, out.width, out.height);
@@ -114,21 +114,17 @@ SC.exporter = (() => {
     const rows = [];
     for (const id of animIds) {
       for (const d of D) {
-        rows.push({ anim: SC.ANIMS[id], key: d.dir ? `${id}_${d.dir}` : id, frames: (o.engine || SC.render).renderAnimation(ch, id, mode, Object.assign({}, o, { view: d.view })) });
+        rows.push({ anim: SC.ANIMS[id], key: d.dir ? `${id}_${d.dir}` : id, frames: SC.engine.renderAnimation(ch, id, mode, Object.assign({}, o, { view: d.view })) });
       }
     }
     const fw = rows[0].frames[0].width, fh = rows[0].frames[0].height;
     const cols = Math.max(...rows.map((r) => r.frames.length));
-    const sheet = SC.render.makeCanvas(fw * cols, fh * rows.length);
+    const sheet = SC.makeCanvas(fw * cols, fh * rows.length);
     const ctx = sheet.getContext('2d');
     const animations = {};
     rows.forEach((r, y) => {
       r.frames.forEach((f, x) => ctx.drawImage(f, x * fw, y * fh));
-      const eng = o.engine || {};
-      animations[r.key] = {
-        row: y, frames: r.frames.length, fps: eng.fps || r.anim.fps,
-        loop: eng.isLoop ? eng.isLoop(r.anim.id) : r.anim.id !== 'attack' && r.anim.id !== 'jump',
-      };
+      animations[r.key] = { row: y, frames: r.frames.length, fps: r.anim.fps, loop: r.anim.id !== 'attack' && r.anim.id !== 'jump' };
     });
     const meta = {
       generator: 'Forja de Sprites',

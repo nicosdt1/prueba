@@ -9,7 +9,7 @@ SC.anatBody = (() => {
   const M = SC.AM;
 
   const DEFAULTS = {
-    style: 'anime', s: 1, b: 0, e: 1.1,
+    style: 'anime', s: 1, b: 0, e: 1.1, m: 0.5,
     bust: { c: 0.5, g: 0.2, q: 0.5 },
     face: { eyeScale: 1, jaw: 0 },
   };
@@ -21,6 +21,7 @@ SC.anatBody = (() => {
       s: M.clamp(p.s != null ? +p.s : d.s, 0, 1),
       b: M.clamp(p.b != null ? +p.b : d.b, -1, 1),
       e: M.clamp(p.e != null ? +p.e : d.e, 0.5, 1.5),
+      m: M.clamp(p.m != null ? +p.m : d.m, 0, 1), // musculatura (morph de MakeHuman)
       bust: Object.assign({}, d.bust, p.bust || {}),
       face: Object.assign({}, d.face, p.face || {}),
     };
@@ -38,16 +39,18 @@ SC.anatBody = (() => {
     for (const [k, v] of Object.entries(C.tau)) tau[k] = M.dimorph(v, s, e);
     for (const [k, v] of Object.entries(C.eta)) eta[k] = M.dimorph(v, s, e);
     const w = {}, chib = M.clamp((5 - N) / 2.5, 0, 1);
-    const ws = Math.pow(Math.max(N, 5) / C.widthScale.ref, C.widthScale.exp);
+    // Escala de anchos por largo (auditoría 3.1); por debajo de 5 cabezas se
+    // interpola hacia el canon chibi.
+    const ref = { torso: Ltorso / C.widthRef.torso, leg: Lleg / C.widthRef.leg };
     for (const [k, v] of Object.entries(C.widths)) {
-      const adult = M.width(v, s, e, b) * ws;
+      const g = C.widthGroup[k], adult = M.width(v, s, e, b) * (g ? ref[g] : 1);
       w[k] = M.lerp(adult, C.chibi.widths[k] * (1 + v[2] * b * 0.5) * (1 + (M.dimorph(v, s, e) / M.dimorph(v, 0.5, 1) - 1) * 0.4), chib);
     }
     const SHR = w.shoulders / w.hip, WHR = w.waist / w.hip;
 
     // 4.3 Longitudes de los huesos.
-    const Larm = (tau.waist - tau.shoulder) * Ltorso;
-    const Lfore = (1 - tau.waist) * Ltorso;
+    const Larm = C.armLength.upperArm * Ltorso;
+    const Lfore = C.armLength.forearm * Ltorso;
     const Lhand = M.lerp(M.clamp(0.25 * Ltorso, C.handLength[0], C.handLength[1]), C.chibi.hand, chib);
     const Lfoot = M.lerp(M.dimorph(C.footK, s, e) * Lleg, C.chibi.foot, chib);
     const ck = M.dimorph(C.kneeConv, s, 1);
@@ -88,7 +91,7 @@ SC.anatBody = (() => {
       thigh: M.dist(J.hip_L.rest, J.knee_L.rest), shin: M.dist(J.knee_L.rest, J.ankle_L.rest),
     };
     return {
-      params: P, style: P.style, face: st.face, H, N, T, Lleg, Ltorso, yT, yL, tau, eta, w, widthScale: M.lerp(ws, 0.55, chib), chibi: chib,
+      params: P, style: P.style, face: st.face, H, N, T, Lleg, Ltorso, yT, yL, tau, eta, w, widthScale: M.lerp(ref.torso, 0.55, chib), chibi: chib,
       indices: { SHR, WHR }, joints: J, bones, carry, aPose,
       valid: st.face === 'chibi' ? Lleg >= C.chibi.minLeg : Ltorso >= C.minTorso * H - 1e-9,
     };

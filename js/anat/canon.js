@@ -9,17 +9,20 @@ SC.CANON = {
   styles: {
     realista: { name: 'Realista', N: 7.5, lambda: 0.50, face: 'realista' },
     heroico: { name: 'Heroico', N: 8.0, lambda: 0.50, face: 'realista' },
-    anime: { name: 'Anime / VN', N: 7.0, lambda: 0.53, face: 'anime' },
-    shojo: { name: 'Shōjo', N: 7.5, lambda: 0.55, face: 'anime' },
+    anime: { name: 'Anime / VN', N: 7.0, lambda: 0.50, face: 'anime' }, // λ 0.53 → 0.50 (auditoría 3.2)
+    shojo: { name: 'Shōjo', N: 7.5, lambda: 0.52, face: 'anime' }, // λ 0.55 → 0.52
     pixel64: { name: 'Pixel 64', N: 5.0, lambda: 0.42, face: 'anime' },
     pixel32: { name: 'Pixel 32', N: 4.0, lambda: 0.38, face: 'chibi' },
     chibi: { name: 'Chibi / SD', N: 2.3, lambda: 0.26, face: 'chibi' },
   },
   minTorso: 0.8, // L_torso >= 0.8 H
-  // Ampliación propia (no está en el documento): los anchos de 3.3 están medidos en
-  // el canon adulto; en estilos de pocas cabezas el cuerpo se estrecha respecto a la
-  // cabeza con (N / ref)^exp, así un chibi no tiene hombros de 1.7 cabezas.
-  widthScale: { ref: 7, exp: 0.5 },
+  // Auditoría 3.1: los anchos de 3.3 están medidos sobre un tronco de 3.0 H y una
+  // pierna de 4.0 H (canon de 8 cabezas). Se escalan al largo real de cada estilo:
+  // tronco y brazos × L_torso / 3.0, piernas × L_pierna / 4.0; cuello y cabeza no.
+  widthRef: { torso: 3.0, leg: 4.0 },
+  widthGroup: { shoulders: 'torso', chest: 'torso', waist: 'torso', hip: 'torso', upperArm: 'torso', forearm: 'torso', wrist: 'torso', thigh: 'leg', knee: 'leg', calf: 'leg', ankle: 'leg' },
+  // Auditoría 3.3: húmero y antebrazo fijos respecto al tronco, sin dimorfismo.
+  armLength: { upperArm: 0.49, forearm: 0.40 },
   // Canon chibi propio (docs/correccion-visual.md, 11.1): no es un adulto encogido.
   // Entre 2.5 y 5 cabezas se interpola entre este canon y el de 5 cabezas.
   chibi: {

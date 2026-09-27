@@ -9,7 +9,7 @@ import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const ctx = { SC: {}, Math, console };
 vm.createContext(ctx);
-for (const f of ['canon', 'math', 'body', 'rig', 'parts']) {
+for (const f of ['canon', 'math', 'body', 'rig']) {
   const file = path.join(root, 'js/anat', f + '.js');
   if (fs.existsSync(file)) vm.runInContext(fs.readFileSync(file, 'utf8'), ctx, { filename: file });
 }
@@ -53,11 +53,13 @@ test('Canon de 8 cabezas: huesos clásicos', () => {
   near(sk.bones.hand, 0.75, 0.01, 'mano'); near(sk.bones.foot, 1.08, 0.01, 'pie');
 });
 
-test('El codo cae a la altura de la cintura con el brazo vertical', () => {
+test('El codo cae a la altura de la cintura con el brazo vertical (± 0.1 L_torso)', () => {
   for (const style of Object.keys(ctx.SC.CANON.styles)) {
-    const sk = B.skeleton({ style, s: 0.5 });
-    const sh = sk.joints.shoulder_L.rest[1];
-    near(sh - sk.bones.upperArm, sk.yT(sk.tau.waist), 1e-9, style);
+    for (const s of [0, 1]) {
+      const sk = B.skeleton({ style, s });
+      const sh = sk.joints.shoulder_L.rest[1];
+      near(sh - sk.bones.upperArm, sk.yT(sk.tau.waist), 0.1 * sk.Ltorso, `${style} s=${s}`);
+    }
   }
 });
 
@@ -137,28 +139,39 @@ test('OKLCH ida y vuelta', () => {
 
 const P = ctx.SC.anatParts;
 
-test('Procrustes recupera una similitud conocida con ε ≈ 0', () => {
-  const pts = [[3, 1], [10, 4], [7, 12], [1, 9], [5, 5]];
-  const s = 1.7, th = 0.6, t = [4, -2];
-  const Q = pts.map(([x, y]) => [s * (Math.cos(th) * x - Math.sin(th) * y) + t[0], s * (Math.sin(th) * x + Math.cos(th) * y) + t[1]]);
-  const r = P.procrustes(pts, Q);
-  near(r.s, s, 1e-9, 's'); near(r.theta, th, 1e-9, 'θ'); near(r.eps, 0, 1e-9, 'ε');
-  assert.equal(P.fitLevel(r.eps), 'encaja');
+// ---------- docs/auditoria.md, sección 5: proporciones de hueso ----------
+const ADULT = ['realista', 'heroico', 'anime', 'shojo'];
+
+test('Brazo mayor que antebrazo en los dos sexos (húmero ≈ 1.2 × antebrazo)', () => {
+  for (const style of ADULT) {
+    for (const s of [0, 0.5, 1]) {
+      const b = B.skeleton({ style, s }).bones;
+      const r = b.upperArm / b.forearm;
+      assert.ok(r > 1.1 && r < 1.35, `${style} s=${s}: brazo/antebrazo ${r.toFixed(2)}`);
+    }
+  }
 });
 
-test('Colocación con dos anclajes lleva pivot y tip a las articulaciones', () => {
-  const anch = { pivot: [24, 8], tip: [26, 140], width_a: [4, 70], width_b: [46, 70] };
-  const j0 = [100, 50], j1 = [160, 170];
-  const r = P.placeTwo(anch, j0, j1, 40);
-  const a = P.apply(r.T, anch.pivot), b = P.apply(r.T, anch.tip);
-  near(a[0], j0[0], 1e-9); near(a[1], j0[1], 1e-9); near(b[0], j1[0], 1e-9); near(b[1], j1[1], 1e-9);
-  near(r.sPerp, 40 / 42, 1e-9, 's⊥');
+test('Con el brazo colgando, la punta de los dedos llega a medio muslo (± 0.3 H)', () => {
+  for (const style of ADULT) {
+    for (const s of [0, 1]) {
+      const sk = B.skeleton({ style, s });
+      const tip = sk.joints.shoulder_L.rest[1] - (sk.bones.upperArm + sk.bones.forearm + sk.bones.hand);
+      near(tip, sk.yL(sk.eta.midThigh), 0.3, `${style} s=${s}: dedos`);
+    }
+  }
 });
 
-test('Lectura de anclajes por momentos: eje principal de un rectángulo inclinado', () => {
-  const W = 80, H = 80, ang = 0.5;
-  const mask = (x, y) => { const dx = x - 40, dy = y - 40, u = dx * Math.cos(ang) + dy * Math.sin(ang), v = -dx * Math.sin(ang) + dy * Math.cos(ang); return Math.abs(u) < 30 && Math.abs(v) < 6; };
-  const a = P.readAnchors(W, H, mask);
-  near(a.phi, ang, 0.03, 'φ');
-  near(Math.hypot(a.tip[0] - a.pivot[0], a.tip[1] - a.pivot[1]), 60, 3, 'largo');
+test('Anchos del tronco escalados a su largo: cadera / tronco ≈ 0.58 (± 0.06) en mujer', () => {
+  for (const style of ADULT) {
+    const sk = B.skeleton({ style, s: 1 });
+    near(sk.w.hip / sk.Ltorso, 0.58, 0.06, `${style}: cadera/tronco`);
+  }
+});
+
+test('Entrepierna del anime a unas 3.5 cabezas de la coronilla (λ 0.50)', () => {
+  const sk = B.skeleton({ style: 'anime', s: 1 });
+  near((sk.T - sk.Lleg) / sk.H, 3.5, 0.05, 'entrepierna');
+  const sj = B.skeleton({ style: 'shojo', s: 1 });
+  near(sj.Lleg / sj.T, 0.52, 1e-9, 'λ shōjo');
 });
